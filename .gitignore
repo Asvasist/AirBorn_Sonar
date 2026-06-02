@@ -1,0 +1,50 @@
+# Vivado generated files
+*.jou
+*.log
+*.str
+*.wdb
+*.wcfg
+*.pb
+*.rpt
+*.dcp
+*.ltx
+
+.cache/
+.hw/
+.ip_user_files/
+.runs/
+.sim/
+.gen/
+.Xil/
+
+# Usually generated, do not commit unless needed as release artifact
+*.bit
+
+# Keep exported XSA
+!hw/vivado/exports/*.xsa
+
+# Vitis generated files
+.metadata/
+.build/
+Debug/
+Release/
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.d
+*.su
+
+# Boot image release exception
+!sw/boot_image/BOOT.BIN
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+*.pyc
