@@ -48,3 +48,32 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# -------------------------
+# Vitis workspace generated content
+# -------------------------
+sw/vitis_workspace/**
+
+# Keep only a placeholder/README so the folder exists in Git
+!sw/vitis_workspace/
+!sw/vitis_workspace/README.md
+!sw/vitis_workspace/.gitkeep
+
+# Do not track generated BSP/build/platform internals
+**/bsp/
+**/libsrc/
+**/build_configs/
+**/Debug/
+**/Release/
+**/.metadata/
+**/.build/
+**/compile_commands.json
+**/CMakeCache.txt
+**/CMakeFiles/
+**/cmake_install.cmake
+**/build.ninja
+**/*.elf
+**/*.o
+**/*.a
+**/*.map
+**/*.bin
