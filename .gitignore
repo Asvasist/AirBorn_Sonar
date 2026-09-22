@@ -1,0 +1,34 @@
+﻿
+# Generated build and workspace files
+build/
+export/
+_backups/
+_ide/
+.rigel_lopper/
+compile_commands.json
+.clangd
+.vitisWorkspace.json
+
+# Compiled files and logs
+*.o
+*.obj
+*.d
+*.elf
+*.exe
+*.map
+*.su
+*.log
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Recorded data and generated plots
+/host/*.bin
+/host/*.json
+/host/*.png
+/host/*.wav
+
+# Editor cache
+.cache/

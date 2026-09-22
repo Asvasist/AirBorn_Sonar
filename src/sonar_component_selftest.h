@@ -1,0 +1,8 @@
+#ifndef SONAR_COMPONENT_SELFTEST_H
+#define SONAR_COMPONENT_SELFTEST_H
+#include "sonar_selftest.h"
+sonar_test_result_t sonar_motor_selftest_run(sonar_test_report_fn report);
+sonar_test_result_t sonar_speaker_selftest_run(sonar_test_report_fn report);
+sonar_test_result_t sonar_driver_selftest_run(sonar_test_report_fn report);
+sonar_test_result_t sonar_codec_selftest_run(sonar_test_report_fn report);
+#endif

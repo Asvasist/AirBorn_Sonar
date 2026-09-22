@@ -1,0 +1,17 @@
+{
+  "name": "airborn_app",
+  "type": "HOST",
+  "platform": "airbornsonar_platform",
+  "domain": "freertos_ps7_cortexa9_0",
+  "cpuInstance": "ps7_cortexa9_0",
+  "cpuType": "cortex-a9",
+  "os": "freertos",
+  "configuration": {
+    "componentType": "HOST",
+    "hostToolchainConfigurations": []
+  },
+  "domainRealName": "freertos_ps7_cortexa9_0",
+  "useSysrootToolchain": false,
+  "applicationFlow": "EMBEDDED",
+  "templateFlow": "VITIS"
+}
