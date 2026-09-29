@@ -3,6 +3,7 @@
 #include "sonar_config.h"
 #include "sonar_platform.h"
 #include "sonar_pl_gpio.h"
+#include "sonar_clock.h"
 #include "xaxidma.h"
 #include "xil_cache.h"
 #include "xil_io.h"
@@ -19,6 +20,7 @@
 #endif
 
 static struct {
+    uint64_t trigger_us;
     XAxiDma dma;
     TaskHandle_t owner;
     volatile sonar_mic_event_t event;
@@ -94,6 +96,7 @@ static bool trigger_capture(void *context)
     (void)context;
     if (!sonar_pl_gpio_update(SONAR_PL_TRIGGER, SONAR_PL_TRIGGER)) { return false; }
     barrier();
+    hardware.trigger_us=sonar_clock_us();
     /* The exported GPIO starts RX and TX together. This is a request, not a sample clock. */
     vTaskDelay(1U);
     if (!sonar_pl_gpio_update(SONAR_PL_TRIGGER, 0U)) { return false; }
@@ -180,3 +183,6 @@ bool sonar_mic_zynq_take_event(sonar_mic_event_t *event)
     taskEXIT_CRITICAL();
     return pending;
 }
+
+uint64_t sonar_mic_zynq_trigger_us(void)
+{ return hardware.trigger_us; }

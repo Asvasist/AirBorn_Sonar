@@ -1,17 +1,15 @@
+#include "sonar_stage2.h"
 #include "sonar_config.h"
 #include "sonar_platform.h"
 #include "sonar_rtos.h"
 #include "sonar_selftest.h"
 #include "sonar_mic_selftest.h"
 #include "sonar_mic_config.h"
-#include "sonar_mic_task.h"
 #include "sonar_console.h"
 #include "sonar_component_selftest.h"
-#include "sonar_scan_task.h"
 #include "sonar_scan_selftest.h"
 #include "sonar_motor_config.h"
 #include "sonar_speaker_board.h"
-#include "sonar_motor_task.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "xil_printf.h"
@@ -34,8 +32,8 @@ int main(void)
     sonar_profile_t profile;
     uint32_t mismatch;
 
-    xil_printf("\r\nAirborne Circular Sonar - Stage 4\r\n");
-    xil_printf("Build: capture-codec fix 2026-09-22\r\n");
+    xil_printf("\r\nAirborne Circular Sonar - Stage 2\r\n");
+    xil_printf("Build: startup peripheral diagnostics 2026-09-28\r\n");
     xil_printf("Design reference: %s\r\n", SONAR_MIC_HARDWARE_NAME);
     tests = sonar_selftest_run(report_test);
     microphone_tests = sonar_mic_selftest_run(report_test);
@@ -83,19 +81,8 @@ int main(void)
     if (!sonar_console_create()) { sonar_halt("console creation"); }
     if (!sonar_console_input_create()) { sonar_halt("console input creation"); }
     if (!sonar_rtos_create(&timing)) { sonar_halt("RTOS object creation"); }
-#if SONAR_MIC_ENABLE_HARDWARE
-    /* This export uses two GPIO bits and a processor-controlled codec. */
-    if (mismatch == 0U) {
-        if (!sonar_mic_task_create()) { sonar_halt("microphone task creation"); }
-    } else { xil_printf("MIC disabled: BSP mismatch\r\n"); }
-#else
-    xil_printf("MIC hardware disabled by configuration\r\n");
-#endif
-    /* Motor (Tic over PS I2C1) is independent of the PL design. */
-    if (!sonar_motor_task_create()) { sonar_halt("motor task creation"); }
-    /* Scan task is simulation-only and read the UART directly; enable it
-     * again only after it is moved onto sonar_console_input_take(). */
-    /* if (!sonar_scan_task_create()) { sonar_halt("scan task creation"); } */
+    if (mismatch != 0U) { sonar_halt("BSP mismatch"); }
+    if (!sonar_stage2_create()) { sonar_halt("Stage 2 task creation"); }
     /* The AMD BSP owns startup, GIC, caches, and the tick source. */
     vTaskStartScheduler();
     sonar_halt("scheduler returned");

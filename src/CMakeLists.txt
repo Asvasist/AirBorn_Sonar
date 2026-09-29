@@ -17,8 +17,8 @@ get_filename_component(APP_NAME "${_component_dir}" NAME)
 project(${APP_NAME} LANGUAGES C ASM)
 find_package(common REQUIRED)
 
-collect(PROJECT_LIB_DEPS xilstandalone;xiltimer;freertos)
-collect(PROJECT_LIB_DEPS freertos)
+collect(PROJECT_LIB_DEPS xilstandalone;xiltimer;lwip220;freertos)
+collect(PROJECT_LIB_DEPS freertos;lwip220)
 collect(PROJECT_LIB_DEPS xil)
 collect(PROJECT_LIB_DEPS xiltimer)
 collect(PROJECT_LIB_DEPS gcc)
@@ -27,14 +27,14 @@ collector_list(_deps PROJECT_LIB_DEPS)
 list(APPEND _deps ${USER_LINK_LIBRARIES})
 
 # Explicit sources prevent a retained template main() from entering the build.
-set(_sources main.c sonar_config.c sonar_health.c sonar_profile.c
+set(_sources sonar_number.c sonar_cycle.c sonar_frames.c sonar_stepper.c sonar_stage2.c sonar_network.c main.c sonar_config.c sonar_health.c sonar_profile.c
     sonar_platform.c sonar_selftest.c sonar_rtos.c sonar_fault.c sonar_console.c
-    sonar_mic.c sonar_mic_selftest.c sonar_mic_zynq.c sonar_mic_task.c sonar_export.c
+    sonar_mic.c sonar_mic_selftest.c sonar_mic_zynq.c
     sonar_motor.c sonar_motor_selftest.c sonar_speaker.c sonar_speaker_selftest.c
-    sonar_ps_i2c.c sonar_tic.c sonar_driver_selftest.c sonar_motor_zynq.c sonar_motor_task.c
+    sonar_ps_i2c.c sonar_tic.c sonar_driver_selftest.c sonar_motor_zynq.c
     sonar_codec_bus.c sonar_codec_selftest.c sonar_speaker_board.c sonar_pl_gpio.c
     sonar_scan_config.c sonar_scan.c sonar_scan_command.c sonar_scan_selftest.c
-    sonar_scan_sim.c sonar_scan_task.c)
+    sonar_scan_sim.c)
 # Use the application's existing memory layout; generated templates are optional.
 if(NOT USER_LINKER_SCRIPT)
     set(USER_LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/lscript.ld")
