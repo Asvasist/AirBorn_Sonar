@@ -60,7 +60,6 @@ bool sonar_scan_frame(const sonar_scan_t *scan, sonar_measurement_t *frame);
 bool sonar_scan_release(sonar_scan_t *scan, uint32_t now);
 void sonar_scan_cancel(sonar_scan_t *scan);
 void sonar_scan_fault(sonar_scan_t *scan, sonar_scan_fault_t fault);
-const char *sonar_scan_state_name(sonar_scan_state_t state);
 
 /* Measurements contain metadata only. The capture adapter retains the actual
  * buffer until release_rx; it must not rearm or overwrite a borrowed frame.

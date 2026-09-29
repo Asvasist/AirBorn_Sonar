@@ -3,7 +3,6 @@
 #include "sonar_platform.h"
 #include "sonar_pl_gpio.h"
 #include "FreeRTOS.h"
-#include "task.h"
 #include "xil_io.h"
 #include <stddef.h>
 
@@ -54,16 +53,6 @@ void sonar_speaker_board_poll(uint32_t now)
 }
 bool sonar_speaker_board_enable(bool enabled)
 { return initialized && sonar_speaker_enable(&speaker, enabled); }
-void sonar_speaker_board_cancel(void)
-{ if (initialized) { sonar_speaker_cancel(&speaker); } }
 const sonar_speaker_t *sonar_speaker_board_state(void)
 { return initialized ? &speaker : NULL; }
 
-bool sonar_speaker_board_output_ready(void)
-{
-    bool ready;
-    taskENTER_CRITICAL();
-    ready = initialized && speaker.state == SPEAKER_READY && speaker.output_enabled;
-    taskEXIT_CRITICAL();
-    return ready;
-}

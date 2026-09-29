@@ -52,15 +52,3 @@ sonar_scan_config_error_t sonar_scan_config_validate(const sonar_scan_config_t *
     *timing = result;
     return SCAN_CONFIG_OK;
 }
-const char *sonar_scan_config_error_name(sonar_scan_config_error_t error)
-{
-    switch (error) {
-    case SCAN_CONFIG_OK: return "valid";
-    case SCAN_CONFIG_ARGUMENT: return "invalid argument";
-    case SCAN_CONFIG_LIMIT: return "mode/count/length/speed outside limits";
-    case SCAN_CONFIG_CALIBRATION: return "set steps_per_rev and confirm reference";
-    case SCAN_CONFIG_TARGET_RANGE: return "requested angle or motor target overflows";
-    case SCAN_CONFIG_TIMING: return "invalid time interval or tick rate";
-    default: return "unknown configuration error";
-    }
-}

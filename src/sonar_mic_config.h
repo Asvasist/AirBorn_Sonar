@@ -1,8 +1,9 @@
 #ifndef SONAR_MIC_CONFIG_H
 #define SONAR_MIC_CONFIG_H
 
-/* Parameters verified in the current AirbornSonar_Initialtest.xsa. */
-#define SONAR_MIC_HARDWARE_NAME "AirbornSonar_Initialtest.xsa"
+/* Legacy one-shot defaults retained for regression/reference tasks.
+ * The running Stage 2 acquisition uses sonar_stage2_config.h. */
+#define SONAR_MIC_HARDWARE_NAME "SonarParty.xsa (2026-09-26; TX 25 ms, RX still 3.125 ms)"
 #define SONAR_MIC_CAPTURE_WORDS 3750U
 #define SONAR_MIC_PDM_HZ 2400000U
 #define SONAR_MIC_CAPTURE_BYTES (SONAR_MIC_CAPTURE_WORDS * 4U)

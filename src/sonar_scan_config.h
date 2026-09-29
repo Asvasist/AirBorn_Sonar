@@ -22,5 +22,4 @@ sonar_scan_config_t sonar_scan_config_default(void);
 sonar_scan_config_error_t sonar_scan_config_validate(const sonar_scan_config_t *config,
     uint32_t tick_hz, sonar_scan_timing_t *timing);
 bool sonar_scan_target(const sonar_scan_config_t *config, uint32_t index, int32_t *steps, int32_t *angle_mdeg);
-const char *sonar_scan_config_error_name(sonar_scan_config_error_t error);
 #endif

@@ -131,9 +131,3 @@ void sonar_scan_cancel(sonar_scan_t *scan)
 {
     if (scan != NULL && scan->state != SCAN_IDLE) { sonar_scan_fault(scan, SCAN_CANCELLED); }
 }
-const char *sonar_scan_state_name(sonar_scan_state_t state)
-{
-    static const char *const names[] = {"IDLE","MOVING","SETTLING","WAIT_INTERVAL",
-        "CAPTURING","FRAME_READY","STOPPING","COMPLETE","FAULT"};
-    return (unsigned)state < sizeof(names)/sizeof(names[0]) ? names[state] : "UNKNOWN";
-}
