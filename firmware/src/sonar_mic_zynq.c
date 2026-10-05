@@ -38,7 +38,7 @@ static void barrier(void)
 
 static void dma_interrupt(void *reference)
 {
-    XAxiDma *dma = reference;
+    const XAxiDma *dma = reference;
     BaseType_t wake = pdFALSE;
     uint32_t irq = XAxiDma_IntrGetIrq(dma, XAXIDMA_DEVICE_TO_DMA);
     XAxiDma_IntrAckIrq(dma, irq, XAXIDMA_DEVICE_TO_DMA);
