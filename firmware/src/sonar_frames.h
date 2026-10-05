@@ -1,6 +1,6 @@
 #ifndef SONAR_FRAMES_H
 #define SONAR_FRAMES_H
-#include "sonar_stage2_config.h"
+#include "sonar_acquisition_config.h"
 #include <stdbool.h>
 #include <stdint.h>
 #define SONAR_WIRE_HEADER 80U
@@ -15,7 +15,7 @@ typedef struct {
 } sonar_frame_meta_t;
 typedef enum { FRAME_FREE, FRAME_FILLING, FRAME_READY, FRAME_SENDING } sonar_frame_state_t;
 typedef struct { sonar_frame_state_t state; sonar_frame_meta_t meta; } sonar_frame_slot_t;
-typedef struct { sonar_frame_slot_t slots[SONAR_STAGE2_POOL_COUNT]; } sonar_frames_t;
+typedef struct { sonar_frame_slot_t slots[SONAR_ACQ_POOL_COUNT]; } sonar_frames_t;
 /* Caller serializes these short metadata operations. Payload is exclusively
  * owned by capture in FILLING, and by the sender in SENDING. */
 int sonar_frames_acquire(sonar_frames_t *);

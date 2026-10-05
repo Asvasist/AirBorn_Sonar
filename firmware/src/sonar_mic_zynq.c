@@ -1,5 +1,5 @@
 #include "sonar_mic_zynq.h"
-#include "sonar_mic_config.h"
+#include "sonar_acquisition_config.h"
 #include "sonar_config.h"
 #include "sonar_platform.h"
 #include "sonar_pl_gpio.h"

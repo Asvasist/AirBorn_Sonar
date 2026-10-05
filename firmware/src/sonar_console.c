@@ -1,5 +1,5 @@
 #include "sonar_console.h"
-#include "sonar_stage2.h"
+#include "sonar_sequencer.h"
 #include "sonar_rtos.h"
 #include "FreeRTOS.h"
 #include "semphr.h"

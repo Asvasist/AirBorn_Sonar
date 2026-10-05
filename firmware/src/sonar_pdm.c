@@ -185,14 +185,14 @@ bool sonar_pdm_to_pcm16_interleaved(const uint8_t *pdm,
     const uint32_t pcm_frames = pdm_samples / SONAR_PDM_DECIMATION;
 
     if (pdm_samples > SONAR_PDM_SAMPLES || (pdm_samples % SONAR_PDM_DECIMATION) != 0U ||
-        pcm_sample_capacity < pcm_frames * SONAR_STAGE2_CHANNELS) {
+        pcm_sample_capacity < pcm_frames * SONAR_ACQ_CHANNELS) {
         return false;
     }
     if (!lut_ready) { build_lut(); }
 
     const uint32_t *words = (const uint32_t *)(const void *)pdm;
 
-    for (unsigned channel = 0U; channel < SONAR_STAGE2_CHANNELS; ++channel) {
+    for (unsigned channel = 0U; channel < SONAR_ACQ_CHANNELS; ++channel) {
         /* Transpose this channel into a contiguous bit stream. */
         for (uint32_t i = 0U; i < CHANNEL_WORDS; ++i) { channel_bits[i] = 0U; }
         for (uint32_t i = 0U; i < pdm_samples; ++i) {
@@ -211,7 +211,7 @@ bool sonar_pdm_to_pcm16_interleaved(const uint8_t *pdm,
                 }
                 sample = q31_to_i16(acc);
             }
-            pcm[frame * SONAR_STAGE2_CHANNELS + channel] = sample;
+            pcm[frame * SONAR_ACQ_CHANNELS + channel] = sample;
         }
     }
 

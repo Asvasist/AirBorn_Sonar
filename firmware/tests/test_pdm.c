@@ -4,12 +4,12 @@
 
 #define CHECK(condition) do { if (!(condition)) { return false; } } while (0)
 
-static uint32_t pdm[SONAR_STAGE2_WORDS];
+static uint32_t pdm[SONAR_ACQ_WORDS];
 static int16_t pcm[SONAR_PCM_SAMPLES];
 
 static void fill_random(uint32_t seed)
 {
-    for (uint32_t i = 0U; i < SONAR_STAGE2_WORDS; ++i) {
+    for (uint32_t i = 0U; i < SONAR_ACQ_WORDS; ++i) {
         seed = seed * 1664525U + 1013904223U;
         pdm[i] = seed;
     }
@@ -28,9 +28,9 @@ static bool fast_path_matches_reference(void)
     fill_random(12345U);
     CHECK(convert(&frames) && frames == SONAR_PCM_FRAMES);
     for (uint32_t frame = 0U; frame < frames; ++frame) {
-        for (unsigned channel = 0U; channel < SONAR_STAGE2_CHANNELS; ++channel) {
+        for (unsigned channel = 0U; channel < SONAR_ACQ_CHANNELS; ++channel) {
             int16_t expected = sonar_pdm_reference_sample(pdm, SONAR_PDM_SAMPLES, frame, channel);
-            CHECK(pcm[frame * SONAR_STAGE2_CHANNELS + channel] == expected);
+            CHECK(pcm[frame * SONAR_ACQ_CHANNELS + channel] == expected);
         }
     }
     return true;
@@ -40,7 +40,7 @@ static bool fast_path_matches_reference(void)
 static bool constant_input_is_full_scale(void)
 {
     uint32_t frames = 0U;
-    const uint32_t middle = (SONAR_PCM_FRAMES / 2U) * SONAR_STAGE2_CHANNELS;
+    const uint32_t middle = (SONAR_PCM_FRAMES / 2U) * SONAR_ACQ_CHANNELS;
     memset(pdm, 0xff, sizeof(pdm));
     CHECK(convert(&frames));
     CHECK(pcm[middle] == INT16_MAX && pcm[middle + 15U] == INT16_MAX);
@@ -53,10 +53,10 @@ static bool constant_input_is_full_scale(void)
 static bool channels_are_independent(void)
 {
     uint32_t frames = 0U;
-    const uint32_t middle = (SONAR_PCM_FRAMES / 2U) * SONAR_STAGE2_CHANNELS;
-    for (uint32_t i = 0U; i < SONAR_STAGE2_WORDS; ++i) { pdm[i] = 0x00200020U; } /* ch 5 high */
+    const uint32_t middle = (SONAR_PCM_FRAMES / 2U) * SONAR_ACQ_CHANNELS;
+    for (uint32_t i = 0U; i < SONAR_ACQ_WORDS; ++i) { pdm[i] = 0x00200020U; } /* ch 5 high */
     CHECK(convert(&frames));
-    for (unsigned channel = 0U; channel < SONAR_STAGE2_CHANNELS; ++channel) {
+    for (unsigned channel = 0U; channel < SONAR_ACQ_CHANNELS; ++channel) {
         CHECK(pcm[middle + channel] == (channel == 5U ? INT16_MAX : INT16_MIN));
     }
     return true;

@@ -459,7 +459,7 @@ class SonarApp:
                 self.cancel_audio()
                 self.invalidate_audio("Board restarted. Reconnect and apply settings again.")
             self.control.line(value)
-            if value and not value.startswith(("HEALTH RUNNING", "STAGE2 IDLE", "STAGE2 STOPPED")):
+            if value and not value.startswith(("HEALTH RUNNING", "SONAR IDLE", "SONAR STOPPED")):
                 self.log(value)
         elif kind == "folder":
             self.session_folder = Path(value)

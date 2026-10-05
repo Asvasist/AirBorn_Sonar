@@ -1,5 +1,5 @@
 #include "sonar_rtos.h"
-#include "sonar_stage2.h"
+#include "sonar_sequencer.h"
 #include "sonar_health.h"
 #include "sonar_console.h"
 #include "FreeRTOS.h"
@@ -118,7 +118,7 @@ static void supervisor_task(void *argument)
         (void)sonar_health_poll(&health, now);
 
         if (health.state != SONAR_WAITING && health.state != SONAR_RUNNING) {
-            sonar_stage2_inhibit();
+            sonar_sequencer_inhibit();
             sonar_console_lock();
             xil_printf("HEALTH FAULT %s; reset to restart\r\n", sonar_health_name(health.state));
             sonar_console_unlock();

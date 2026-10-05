@@ -12,7 +12,7 @@ APPLIED = dict(config_id=1, mode=0, duration_us=35000, amplitude_pct=40, wavefor
 
 def status(state="IDLE", steps=20, receiver=1, used=0, config=1):
     ready = int(state in {"IDLE", "STOPPED"})
-    return (f"STAGE2 {state} cycle=3 steps={steps} divisor=1 receiver={receiver} motor_pos=60 DDR={used}/32"
+    return (f"SONAR {state} cycle=3 steps={steps} divisor=1 receiver={receiver} motor_pos=60 DDR={used}/32"
             f" config={config} mode=GENERATE tx_us=35000 amplitude=40 waveform=0 audio_ready={ready}")
 
 

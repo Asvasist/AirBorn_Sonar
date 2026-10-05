@@ -1,4 +1,4 @@
-#include "sonar_stage2.h"
+#include "sonar_sequencer.h"
 #include "sonar_console.h"
 #include "sonar_processing.h"
 #include "sonar_clock.h"
@@ -86,7 +86,7 @@ static bool send_record(int fd, int slot, uint64_t batch_us)
         meta=sonar_frames.slots[slot].meta;
 
         if (!sonar_processing_make_wav(sonar_frame_data[slot],
-                                       SONAR_STAGE2_BYTES,
+                                       SONAR_ACQ_BYTES,
                                        &payload,
                                        &bytes,
                                        &pcm_frames)) {
@@ -125,7 +125,7 @@ static void serve(int fd)
     connection(true); note("receiver connected; data batches every 30 seconds, ACK required before buffer reuse.");
     TickType_t wake=xTaskGetTickCount();
     for (;;) {
-        while ((TickType_t)(xTaskGetTickCount()-wake)<pdMS_TO_TICKS(SONAR_STAGE2_BATCH_MS)) {
+        while ((TickType_t)(xTaskGetTickCount()-wake)<pdMS_TO_TICKS(SONAR_ACQ_BATCH_MS)) {
             discovery_poll();
             /* Detect a closed receiver during the idle interval so reconnects
              * do not wait behind an abandoned connection for 30 seconds. */
@@ -137,7 +137,7 @@ static void serve(int fd)
             }
             vTaskDelay(pdMS_TO_TICKS(50));
         }
-        wake+=pdMS_TO_TICKS(SONAR_STAGE2_BATCH_MS);
+        wake+=pdMS_TO_TICKS(SONAR_ACQ_BATCH_MS);
         taskENTER_CRITICAL(); uint32_t through=sonar_frames_latest(&sonar_frames); taskEXIT_CRITICAL();
         uint64_t batch_us=sonar_clock_us();
         if (!send_record(fd,-1,batch_us)) { return; }
@@ -154,7 +154,7 @@ static void serve(int fd)
         xil_printf("ETH batch complete: %u capture(s) saved and acknowledged\r\n",sent);
         sonar_console_unlock();
         /* Avoid a burst of missed periodic releases after a slow batch. */
-        if ((TickType_t)(xTaskGetTickCount()-wake)>=pdMS_TO_TICKS(SONAR_STAGE2_BATCH_MS)) { wake=xTaskGetTickCount(); }
+        if ((TickType_t)(xTaskGetTickCount()-wake)>=pdMS_TO_TICKS(SONAR_ACQ_BATCH_MS)) { wake=xTaskGetTickCount(); }
     }
 }
 void sonar_network_task(void *unused)

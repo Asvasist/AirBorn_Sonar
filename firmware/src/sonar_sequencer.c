@@ -1,4 +1,4 @@
-#include "sonar_stage2.h"
+#include "sonar_sequencer.h"
 #include "sonar_number.h"
 #include "sonar_cycle.h"
 #include "sonar_stepper.h"
@@ -24,7 +24,7 @@
 #include "xil_printf.h"
 
 sonar_frames_t sonar_frames;
-uint8_t sonar_frame_data[SONAR_STAGE2_POOL_COUNT][SONAR_STAGE2_SPAN] __attribute__((aligned(32)));
+uint8_t sonar_frame_data[SONAR_ACQ_POOL_COUNT][SONAR_ACQ_SPAN] __attribute__((aligned(32)));
 static QueueHandle_t keys;
 static TaskHandle_t experiment_handle;
 static bool stop_requested, inhibited, input_overflow;
@@ -44,9 +44,9 @@ static uint64_t now_us(void)
 {
     return sonar_clock_us();
 }
-void sonar_stage2_inhibit(void)
+void sonar_sequencer_inhibit(void)
 { taskENTER_CRITICAL(); inhibited=true; stop_requested=true; taskEXIT_CRITICAL(); }
-void sonar_stage2_key(uint8_t key)
+void sonar_sequencer_key(uint8_t key)
 {
     if (key>='A' && key<='Z') { key=(uint8_t)(key-'A'+'a'); }
     if (key=='x') { taskENTER_CRITICAL(); stop_requested=true; taskEXIT_CRITICAL(); }
@@ -100,9 +100,9 @@ static int capture(void *context, uint32_t sequence, uint64_t *trigger)
         filling=-1;
         return tx_stopped?0:-1;
     }
-    sonar_mic_config_t cfg={SONAR_STAGE2_BYTES,
-        pdMS_TO_TICKS((SONAR_STAGE2_CAPTURE_TIMEOUT_US+999U)/1000U),SONAR_STAGE2_PDM_HZ};
-    if (!sonar_mic_init(&mic,&cfg,&mic_io,sonar_frame_data[filling],SONAR_STAGE2_SPAN) ||
+    sonar_mic_config_t cfg={SONAR_ACQ_BYTES,
+        pdMS_TO_TICKS((SONAR_ACQ_CAPTURE_TIMEOUT_US+999U)/1000U),SONAR_ACQ_PDM_HZ};
+    if (!sonar_mic_init(&mic,&cfg,&mic_io,sonar_frame_data[filling],SONAR_ACQ_SPAN) ||
         !sonar_speaker_board_enable(true)) { return -1; }
     metadata=(sonar_frame_meta_t){.sequence=sequence,
         .flags=15U | (tx->config_id<<16U) | (tx->mode==SONAR_TX_WAV?0x200U:0U),
@@ -129,17 +129,17 @@ static void report(void)
 {
     unsigned used=0;
     taskENTER_CRITICAL();
-    for (unsigned i=0;i<SONAR_STAGE2_POOL_COUNT;++i) {
+    for (unsigned i=0;i<SONAR_ACQ_POOL_COUNT;++i) {
         if (sonar_frames.slots[i].state!=FRAME_FREE) { ++used; }
     }
     taskEXIT_CRITICAL();
     const sonar_experiment_config_t *tx=sonar_experiment_active();
     const sonar_chirp_values_t *tv=sonar_experiment_values();
     sonar_console_lock();
-    xil_printf("STAGE2 %s cycle=%u steps=%d divisor=%u receiver=%u motor_pos=%d DDR=%u/%u config=%u mode=%s tx_us=%u amplitude=%u waveform=%u audio_ready=%u tx_sample_hz=96000 rx_sample_hz=96000\r\n",
+    xil_printf("SONAR %s cycle=%u steps=%d divisor=%u receiver=%u motor_pos=%d DDR=%u/%u config=%u mode=%s tx_us=%u amplitude=%u waveform=%u audio_ready=%u tx_sample_hz=96000 rx_sample_hz=96000\r\n",
         sonar_cycle_name(cycle.state),(unsigned)cycle.cycle,(int)requested_positions,
         (unsigned)motor.divisor,(unsigned)sonar_network_connected(),(int)motor.status.position,
-        used,(unsigned)SONAR_STAGE2_POOL_COUNT,(unsigned)tx->config_id,
+        used,(unsigned)SONAR_ACQ_POOL_COUNT,(unsigned)tx->config_id,
         tx->mode==SONAR_TX_WAV?"WAV":"GENERATE",(unsigned)tv->duration_us,
         (unsigned)tx->amplitude_pct,(unsigned)tx->waveform_id,(unsigned)sonar_experiment_can_start());
     sonar_console_unlock();
@@ -180,11 +180,11 @@ static void experiment_task(void *unused)
     (void)unused;
     sonar_tic_io_t motor_io;
     sonar_tic_config_t mc={SONAR_MOTOR_ADDRESS,SONAR_MOTOR_SPEED,SONAR_MOTOR_ACCELERATION,
-        SONAR_MOTOR_DECELERATION,0,pdMS_TO_TICKS((SONAR_STAGE2_MOVE_TIMEOUT_US+999U)/1000U),
+        SONAR_MOTOR_DECELERATION,0,pdMS_TO_TICKS((SONAR_ACQ_MOVE_TIMEOUT_US+999U)/1000U),
         pdMS_TO_TICKS(SONAR_MOTOR_KEEPALIVE_MS),pdMS_TO_TICKS(SONAR_MOTOR_WATCHDOG_MS)};
     const sonar_cycle_config_t cc={SONAR_CAPTURE_US+SONAR_TX_TIMEOUT_MARGIN_US,
-        SONAR_STAGE2_MOTOR_START_US,SONAR_STAGE2_SETTLE_US,SONAR_STAGE2_CAPTURE_TIMEOUT_US,
-        SONAR_STAGE2_MOVE_TIMEOUT_US};
+        SONAR_ACQ_MOTOR_START_US,SONAR_ACQ_SETTLE_US,SONAR_ACQ_CAPTURE_TIMEOUT_US,
+        SONAR_ACQ_MOVE_TIMEOUT_US};
     const sonar_cycle_io_t ci={NULL,capture,move_motor,stop_outputs};
     /* Keep each result: short-circuiting one combined flag hid the failed
      * peripheral, and the run-time fault report skipped initialization faults. */
@@ -195,7 +195,7 @@ static void experiment_task(void *unused)
     bool codec_begin_ok=codec_ok && sonar_speaker_board_begin((uint32_t)xTaskGetTickCount());
     bool motor_bus_ok=sonar_motor_zynq_init(&motor_io);
     bool tic_ok=motor_bus_ok && sonar_stepper_init(&motor,&mc,&motor_io);
-    bool mode_ok=tic_ok && sonar_stepper_mode(&motor,SONAR_STAGE2_DEFAULT_DIVISOR);
+    bool mode_ok=tic_ok && sonar_stepper_mode(&motor,SONAR_ACQ_DEFAULT_DIVISOR);
     motor_ready=motor_bus_ok && tic_ok && mode_ok;
     bool ok=cycle_ok && dma_ok && codec_ok && codec_begin_ok && motor_ready;
     sonar_console_lock();
@@ -225,7 +225,7 @@ static void experiment_task(void *unused)
         }
         if (!motor_ready && codec_begin_ok) { message("INIT CODEC: configuration may be incomplete because motor initialization failed."); }
         (void)stop_outputs(NULL); cycle.state=CYCLE_FAULT;
-        message("STAGE2 not ready: peripheral initialization or health check failed. Reset to retry.");
+        message("SONAR not ready: peripheral initialization or health check failed. Reset to retry.");
     } else {
         message("READY: codec writes, DMA setup and Tic communication checked; acoustic/motion tests require a run.");
         message("n: enter signed positions per 360 degrees then Enter; v: enter divisor; r: run one revolution; x: stop; s: status; ?: help");
@@ -234,7 +234,7 @@ static void experiment_task(void *unused)
         message("Motor deadline 2000 ms from trigger; settle 2000 ms after movement.");
         sonar_console_lock();
         xil_printf("RX contract: %u words, %u bytes, %u us. Ethernet: " SONAR_NET_IP ":5001.\r\n",
-            (unsigned)SONAR_STAGE2_WORDS,(unsigned)SONAR_STAGE2_BYTES,(unsigned)SONAR_STAGE2_RX_US);
+            (unsigned)SONAR_ACQ_WORDS,(unsigned)SONAR_ACQ_BYTES,(unsigned)SONAR_ACQ_RX_US);
         sonar_console_unlock();
     }
     sonar_number_t number={0}; uint8_t prompt=0;
@@ -312,7 +312,7 @@ static void experiment_task(void *unused)
                 if (!published) { fatal=true; }
                 sonar_console_lock();
                 xil_printf("CYCLE %u: RX complete; TX finished; %u bytes queued in DDR\r\n",
-                    (unsigned)metadata.sequence,(unsigned)SONAR_STAGE2_BYTES);
+                    (unsigned)metadata.sequence,(unsigned)SONAR_ACQ_BYTES);
                 sonar_console_unlock();
             }
             (void)sonar_mic_release(&mic); filling=-1; captured=true;
@@ -321,7 +321,7 @@ static void experiment_task(void *unused)
         sonar_cycle_poll(&cycle,now_us(),captured,tx_done,motor.state==STEPPER_DONE,
             fatal || tx_fault || !ok || motor.state==STEPPER_FAULT || mic.state==MIC_FAULT);
         if (before==CYCLE_ACQUIRE && cycle.state!=CYCLE_ACQUIRE) {
-            if (!sonar_speaker_board_enable(false)) { sonar_stage2_inhibit(); }
+            if (!sonar_speaker_board_enable(false)) { sonar_sequencer_inhibit(); }
         }
         if (before==CYCLE_MOVING && cycle.state==CYCLE_SETTLING) {
             message("Motor completed; 2-second settling pause starts now.");
@@ -342,7 +342,7 @@ static void experiment_task(void *unused)
         }
         if (cycle.state==CYCLE_FAULT && !fault_reported) {
             if (mic.state==MIC_CAPTURING) { sonar_mic_cancel(&mic); }
-            message("STAGE2 FAULT: outputs stopped; retained frames can still transfer. Reset required.");
+            message("SONAR FAULT: outputs stopped; retained frames can still transfer. Reset required.");
             sonar_console_lock();
             xil_printf("Cycle cause=%s in %s; MIC fault=%s; motor cause=%s before-stop errors=0x%x valid=%u; after-stop errors=0x%x\r\n",
                 cycle.fault_reason!=NULL?cycle.fault_reason:"INITIALIZATION",sonar_cycle_name(cycle.fault_state),
@@ -355,7 +355,7 @@ static void experiment_task(void *unused)
         (void)ulTaskNotifyTake(pdTRUE,1U);
     }
 }
-bool sonar_stage2_create(void)
+bool sonar_sequencer_create(void)
 {
     if (!sonar_control_create()) { return false; }
     keys=xQueueCreate(64,1);

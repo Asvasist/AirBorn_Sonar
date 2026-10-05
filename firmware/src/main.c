@@ -1,8 +1,8 @@
-#include "sonar_stage2.h"
+#include "sonar_sequencer.h"
+#include "sonar_acquisition_config.h"
 #include "sonar_config.h"
 #include "sonar_platform.h"
 #include "sonar_rtos.h"
-#include "sonar_mic_config.h"
 #include "sonar_console.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -16,7 +16,7 @@ int main(void)
     uint32_t mismatch = sonar_profile_check(&profile);
 
     xil_printf("\r\nAirborne Circular Sonar\r\n");
-    xil_printf("Design reference: %s\r\n", SONAR_MIC_HARDWARE_NAME);
+    xil_printf("Design reference: %s\r\n", SONAR_HARDWARE_NAME);
     if (!sonar_config_validate(&config, (uint32_t)configTICK_RATE_HZ, &timing)) {
         sonar_halt("invalid timing configuration");
     }
@@ -33,7 +33,7 @@ int main(void)
         (unsigned int)timing.timeout);
     if (!sonar_console_create()) { sonar_halt("console creation"); }
     if (!sonar_rtos_create(&timing)) { sonar_halt("RTOS object creation"); }
-    if (!sonar_stage2_create()) { sonar_halt("Stage 2 task creation"); }
+    if (!sonar_sequencer_create()) { sonar_halt("sequencer task creation"); }
     /* The AMD BSP owns startup, GIC, caches, and the tick source. */
     vTaskStartScheduler();
     sonar_halt("scheduler returned");

@@ -2,7 +2,7 @@
 import re
 import time
 
-STATUS = re.compile(r"STAGE2 (IDLE|WAIT_BUFFER|ACQUIRE|PRE_MOVE|MOVING|SETTLING|STOPPED|FAULT) "
+STATUS = re.compile(r"SONAR (IDLE|WAIT_BUFFER|ACQUIRE|PRE_MOVE|MOVING|SETTLING|STOPPED|FAULT) "
                     r"cycle=(\d+) steps=(-?\d+) divisor=(\d+) receiver=(\d+) motor_pos=(-?\d+) DDR=(\d+)/(\d+)")
 IDLE_STATES = {"IDLE", "STOPPED"}
 AUDIO_STATUS = re.compile(r"config=(\d+) mode=(GENERATE|WAV) tx_us=(\d+) amplitude=(\d+) waveform=(\d+) audio_ready=(\d+)")
@@ -120,7 +120,7 @@ class ExperimentControl:
             self.fault_latched = False
             self.last_status = 0.0
             return
-        if "STAGE2 FAULT:" in line or "HEALTH FAULT" in line or "STAGE2 not ready:" in line:
+        if "SONAR FAULT:" in line or "HEALTH FAULT" in line or "SONAR not ready:" in line:
             self.fault_latched = True
             self.board_state = "FAULT"
             self.phase = "idle"

@@ -11,7 +11,6 @@ static sonar_motor_zynq_diagnostic_t diagnostic = {.init_reason="NOT_ATTEMPTED"}
 const sonar_motor_zynq_diagnostic_t *sonar_motor_zynq_diagnostic(void)
 { return &diagnostic; }
 
-#if SONAR_MOTOR_ENABLE_HARDWARE
 #define I2C1_BASE UINT32_C(0xe0005000)
 #define SLCR_UNLOCK UINT32_C(0xf8000008)
 #define SLCR_LOCK UINT32_C(0xf8000004)
@@ -60,11 +59,9 @@ static bool receive(void *context, uint8_t address, uint8_t *data, uint32_t leng
 }
 static bool init_failed(const char *reason)
 { diagnostic.init_reason=reason; return false; }
-#endif
 
 bool sonar_motor_zynq_init(sonar_tic_io_t *io)
 {
-#if SONAR_MOTOR_ENABLE_HARDWARE
     uint32_t timeout, mio12, mio13;
     const sonar_ps_i2c_io_t registers = {NULL, read_register, write_register, ticks, wait_tick};
     if (initialized) { return init_failed("ALREADY_INITIALIZED"); }
@@ -107,9 +104,4 @@ bool sonar_motor_zynq_init(sonar_tic_io_t *io)
     initialized = true;
     diagnostic.init_reason="OK";
     return true;
-#else
-    (void)io;
-    diagnostic.init_reason="HARDWARE_DISABLED";
-    return false;
-#endif
 }

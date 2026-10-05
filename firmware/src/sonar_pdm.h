@@ -1,7 +1,7 @@
 #ifndef SONAR_PDM_H
 #define SONAR_PDM_H
 
-#include "sonar_stage2_config.h"
+#include "sonar_acquisition_config.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -21,17 +21,17 @@
  */
 #define SONAR_PCM_RATE_HZ          96000U
 #define SONAR_PCM_BITS_PER_SAMPLE  16U
-#define SONAR_PDM_DECIMATION       (SONAR_STAGE2_PDM_HZ / SONAR_PCM_RATE_HZ)
-#define SONAR_PDM_SAMPLES          (SONAR_STAGE2_WORDS * 2U)
+#define SONAR_PDM_DECIMATION       (SONAR_ACQ_PDM_HZ / SONAR_PCM_RATE_HZ)
+#define SONAR_PDM_SAMPLES          (SONAR_ACQ_WORDS * 2U)
 #define SONAR_PCM_FRAMES           (SONAR_PDM_SAMPLES / SONAR_PDM_DECIMATION)
-#define SONAR_PCM_SAMPLES          (SONAR_PCM_FRAMES * SONAR_STAGE2_CHANNELS)
+#define SONAR_PCM_SAMPLES          (SONAR_PCM_FRAMES * SONAR_ACQ_CHANNELS)
 #define SONAR_PCM_BYTES            (SONAR_PCM_SAMPLES * sizeof(int16_t))
 
-_Static_assert(SONAR_STAGE2_CHANNELS == 16U,
+_Static_assert(SONAR_ACQ_CHANNELS == 16U,
                "sonar_pdm.c is matched to the current 16-channel Vivado packer");
-_Static_assert(SONAR_STAGE2_PDM_HZ == 2400000U,
+_Static_assert(SONAR_ACQ_PDM_HZ == 2400000U,
                "Re-design the PDM decimator coefficients if the PDM clock changes");
-_Static_assert((SONAR_STAGE2_PDM_HZ % SONAR_PCM_RATE_HZ) == 0U,
+_Static_assert((SONAR_ACQ_PDM_HZ % SONAR_PCM_RATE_HZ) == 0U,
                "PDM clock must divide exactly to the selected PCM rate");
 _Static_assert((SONAR_PDM_SAMPLES % SONAR_PDM_DECIMATION) == 0U,
                "Capture length must contain an integer number of PCM frames");

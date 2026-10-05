@@ -29,7 +29,7 @@ list(APPEND _deps ${USER_LINK_LIBRARIES})
 # Explicit sources prevent a retained template main() from entering the build.
 set(_sources main.c sonar_config.c sonar_health.c sonar_profile.c sonar_platform.c
     sonar_rtos.c sonar_fault.c sonar_console.c sonar_console_buffer.c sonar_tcp_console.c
-    sonar_stage2.c sonar_cycle.c sonar_frames.c sonar_number.c sonar_scan360.c
+    sonar_sequencer.c sonar_cycle.c sonar_frames.c sonar_number.c sonar_scan360.c
     sonar_mic.c sonar_mic_zynq.c sonar_pdm.c sonar_wav.c sonar_processing.c sonar_network.c
     sonar_stepper.c sonar_ps_i2c.c sonar_motor_zynq.c
     sonar_speaker.c sonar_speaker_board.c sonar_codec_bus.c sonar_pl_gpio.c

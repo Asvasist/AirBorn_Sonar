@@ -1,6 +1,6 @@
 #include "sonar_tcp_console.h"
 #include "sonar_console_buffer.h"
-#include "sonar_stage2.h"
+#include "sonar_sequencer.h"
 #include "sonar_console.h"
 #include "sonar_socket.h"
 #include "FreeRTOS.h"
@@ -96,12 +96,12 @@ static void serve(int fd)
         if (n > 0) {
             last_rx = xTaskGetTickCount();
             bool stop = memchr(input, 'x', (size_t)n) != NULL || memchr(input, 'X', (size_t)n) != NULL;
-            if (stop) { sonar_stage2_key('x'); }
+            if (stop) { sonar_sequencer_key('x'); }
             else {
                 for (int i = 0; i < n; ++i) {
                     if (input[i] == 0U) { continue; } /* Heartbeat. */
                     if (!live || input[i] > 127U) { goto disconnected; }
-                    sonar_stage2_key(input[i]);
+                    sonar_sequencer_key(input[i]);
                 }
             }
         }
@@ -130,7 +130,7 @@ static void serve(int fd)
     }
 disconnected:
     /* Priority Stop clears queued start/settings in the experiment task. */
-    sonar_stage2_key('x');
+    sonar_sequencer_key('x');
     note("connection lost/closed; Stop requested; queued recordings retained.");
 }
 
