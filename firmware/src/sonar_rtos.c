@@ -51,7 +51,9 @@ static uint32_t last_sent;
 void sonar_rtos_heartbeat(void)
 {
     uint32_t now = (uint32_t)xTaskGetTickCount();
-    if (sequence != 0U && (uint32_t)(now - last_sent) < periods.heartbeat) { return; }
+    if (sequence != 0U && (uint32_t)(now - last_sent) < periods.heartbeat) {
+        return;
+    }
     sonar_heartbeat_t event = {sequence, now};
     if (xQueueSend(heartbeat_queue, &event, 0U) == pdPASS) {
         ++sequence;
@@ -101,8 +103,12 @@ static void supervisor_task(void *argument)
     sonar_console_unlock();
     /* Monitoring starts with the first heartbeat, after peripheral initialization. */
     (void)xQueuePeek(heartbeat_queue, &event, portMAX_DELAY);
-    if (!sonar_health_init(&health, event.tick, periods.timeout)) { sonar_halt("health init"); }
-    if (!watchdog_start()) { sonar_halt("watchdog init"); }
+    if (!sonar_health_init(&health, event.tick, periods.timeout)) {
+        sonar_halt("health init");
+    }
+    if (!watchdog_start()) {
+        sonar_halt("watchdog init");
+    }
     last_report = event.tick;
 
     for (;;) {
@@ -113,8 +119,12 @@ static void supervisor_task(void *argument)
         taskENTER_CRITICAL();
         overflow = queue_failed;
         taskEXIT_CRITICAL();
-        if (overflow) { sonar_health_queue_fault(&health); }
-        if (received == pdPASS) { (void)sonar_health_accept(&health, &event, now); }
+        if (overflow) {
+            sonar_health_queue_fault(&health);
+        }
+        if (received == pdPASS) {
+            (void)sonar_health_accept(&health, &event, now);
+        }
         (void)sonar_health_poll(&health, now);
 
         if (health.state != SONAR_WAITING && health.state != SONAR_RUNNING) {
@@ -130,8 +140,8 @@ static void supervisor_task(void *argument)
         if (health.state == SONAR_RUNNING &&
             (!announced || (uint32_t)(now - last_report) >= periods.report)) {
             sonar_console_lock();
-            xil_printf("HEALTH RUNNING received=%u tick=%u\r\n",
-                       (unsigned int)health.received, (unsigned int)now);
+            xil_printf("HEALTH RUNNING received=%u tick=%u\r\n", (unsigned int)health.received,
+                       (unsigned int)now);
 #if INCLUDE_uxTaskGetStackHighWaterMark == 1
             xil_printf("STACK free_min_words supervisor=%u\r\n",
                        (unsigned int)uxTaskGetStackHighWaterMark(supervisor_handle));
@@ -148,14 +158,18 @@ bool sonar_rtos_create(const sonar_timing_t *timing)
     if (creation_attempted || timing == NULL || timing->heartbeat == 0U ||
         timing->timeout > UINT32_MAX / 2U || timing->report > UINT32_MAX / 2U ||
         (uint64_t)timing->timeout <= 2U * (uint64_t)timing->heartbeat ||
-        timing->report < timing->heartbeat) { return false; }
+        timing->report < timing->heartbeat) {
+        return false;
+    }
     creation_attempted = true;
     periods = *timing;
     queue_failed = false;
 
     /* Allocated once at startup; no task allocates memory while running. */
     heartbeat_queue = xQueueCreate(SONAR_QUEUE_LENGTH, sizeof(sonar_heartbeat_t));
-    if (heartbeat_queue == NULL) { return false; }
+    if (heartbeat_queue == NULL) {
+        return false;
+    }
     return xTaskCreate(supervisor_task, "supervisor", SONAR_TASK_STACK_WORDS, NULL,
                        tskIDLE_PRIORITY + 3U, &supervisor_handle) == pdPASS;
 }

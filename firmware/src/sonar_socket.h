@@ -8,8 +8,8 @@
  * and UDP discovery. Call from tasks only. */
 typedef enum {
     SONAR_SOCKET_DONE,
-    SONAR_SOCKET_CLOSED,  /* Peer closed the connection. */
-    SONAR_SOCKET_FAILED,  /* Socket error; errno holds the lwIP error. */
+    SONAR_SOCKET_CLOSED, /* Peer closed the connection. */
+    SONAR_SOCKET_FAILED, /* Socket error; errno holds the lwIP error. */
     SONAR_SOCKET_TIMEOUT
 } sonar_socket_status_t;
 

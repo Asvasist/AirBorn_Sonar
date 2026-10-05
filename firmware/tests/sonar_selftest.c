@@ -4,7 +4,12 @@
 #include "sonar_profile.h"
 #include <stddef.h>
 
-#define CHECK(condition) do { if (!(condition)) { return false; } } while (0)
+#define CHECK(condition)                                                                           \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            return false;                                                                          \
+        }                                                                                          \
+    } while (0)
 
 static bool default_config(void)
 {
@@ -182,14 +187,14 @@ static bool invalid_health_arguments_fail(void)
 static bool active_profile_matches(void)
 {
     sonar_profile_t profile = {SONAR_EXPECTED_GPIO_BASE, SONAR_EXPECTED_GPIO_WIDTH,
-        SONAR_EXPECTED_DMA_BASE, 1U, SONAR_EXPECTED_IIC_BASE};
+                               SONAR_EXPECTED_DMA_BASE, 1U, SONAR_EXPECTED_IIC_BASE};
     return sonar_profile_check(&profile) == 0U;
 }
 
 static bool archived_profile_is_flagged(void)
 {
-    sonar_profile_t profile = {SONAR_EXPECTED_GPIO_BASE, 1U,
-        SONAR_EXPECTED_DMA_BASE, 1U, UINT32_C(0)};
+    sonar_profile_t profile = {SONAR_EXPECTED_GPIO_BASE, 1U, SONAR_EXPECTED_DMA_BASE, 1U,
+                               UINT32_C(0)};
     return sonar_profile_check(&profile) == (SONAR_PROFILE_GPIO | SONAR_PROFILE_IIC);
 }
 
@@ -203,35 +208,42 @@ static bool unknown_profile_is_flagged(void)
 
 sonar_test_result_t sonar_selftest_run(sonar_test_report_fn report)
 {
-    static const struct { const char *name; bool (*run)(void); } tests[] = {
-        {"default configuration", default_config},
-        {"fractional tick rounding", fractional_ticks_round_up},
-        {"invalid tick conversion", invalid_conversion_preserves_output},
-        {"invalid configuration", invalid_config_preserves_output},
-        {"coarse tick margin", coarse_tick_rate_rejects_lost_margin},
-        {"wait for first heartbeat", health_waits_for_first_event},
-        {"startup deadline", startup_timeout_is_inclusive},
-        {"ordered heartbeat delivery", valid_events_advance_state},
-        {"missing heartbeat and fault latch", missing_event_is_latched},
-        {"duplicate heartbeat", duplicate_event_fails},
-        {"stale queued heartbeat", stale_queued_event_fails},
-        {"late heartbeat", late_event_cannot_hide_gap},
-        {"supervisor stall", queued_events_cannot_hide_supervisor_stall},
-        {"future timestamp", future_timestamp_fails},
-        {"tick rollover", tick_wrap_is_supported},
-        {"sequence rollover", sequence_wrap_is_supported},
-        {"queue fault and first cause", queue_fault_preserves_first_cause},
-        {"invalid health arguments", invalid_health_arguments_fail},
-        {"active BD BSP profile", active_profile_matches},
-        {"older one-bit BSP rejected", archived_profile_is_flagged},
-        {"unknown BSP profile", unknown_profile_is_flagged}
-    };
+    static const struct {
+        const char *name;
+        bool (*run)(void);
+    } tests[] = {{"default configuration", default_config},
+                 {"fractional tick rounding", fractional_ticks_round_up},
+                 {"invalid tick conversion", invalid_conversion_preserves_output},
+                 {"invalid configuration", invalid_config_preserves_output},
+                 {"coarse tick margin", coarse_tick_rate_rejects_lost_margin},
+                 {"wait for first heartbeat", health_waits_for_first_event},
+                 {"startup deadline", startup_timeout_is_inclusive},
+                 {"ordered heartbeat delivery", valid_events_advance_state},
+                 {"missing heartbeat and fault latch", missing_event_is_latched},
+                 {"duplicate heartbeat", duplicate_event_fails},
+                 {"stale queued heartbeat", stale_queued_event_fails},
+                 {"late heartbeat", late_event_cannot_hide_gap},
+                 {"supervisor stall", queued_events_cannot_hide_supervisor_stall},
+                 {"future timestamp", future_timestamp_fails},
+                 {"tick rollover", tick_wrap_is_supported},
+                 {"sequence rollover", sequence_wrap_is_supported},
+                 {"queue fault and first cause", queue_fault_preserves_first_cause},
+                 {"invalid health arguments", invalid_health_arguments_fail},
+                 {"active BD BSP profile", active_profile_matches},
+                 {"older one-bit BSP rejected", archived_profile_is_flagged},
+                 {"unknown BSP profile", unknown_profile_is_flagged}};
     sonar_test_result_t result = {0U, 0U};
     size_t i;
     for (i = 0U; i < sizeof(tests) / sizeof(tests[0]); ++i) {
         bool passed = tests[i].run();
-        if (passed) { ++result.passed; } else { ++result.failed; }
-        if (report != NULL) { report(tests[i].name, passed); }
+        if (passed) {
+            ++result.passed;
+        } else {
+            ++result.failed;
+        }
+        if (report != NULL) {
+            report(tests[i].name, passed);
+        }
     }
     return result;
 }

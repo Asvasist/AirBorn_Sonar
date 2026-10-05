@@ -19,13 +19,13 @@
  * 2.4 MHz PDM clock. Decimation is 25 for 96 kHz PCM.
  * The existing 12 kHz FIR cutoff is retained for the current sonar band.
  */
-#define SONAR_PCM_RATE_HZ          96000U
-#define SONAR_PCM_BITS_PER_SAMPLE  16U
-#define SONAR_PDM_DECIMATION       (SONAR_ACQ_PDM_HZ / SONAR_PCM_RATE_HZ)
-#define SONAR_PDM_SAMPLES          (SONAR_ACQ_WORDS * 2U)
-#define SONAR_PCM_FRAMES           (SONAR_PDM_SAMPLES / SONAR_PDM_DECIMATION)
-#define SONAR_PCM_SAMPLES          (SONAR_PCM_FRAMES * SONAR_ACQ_CHANNELS)
-#define SONAR_PCM_BYTES            (SONAR_PCM_SAMPLES * sizeof(int16_t))
+#define SONAR_PCM_RATE_HZ         96000U
+#define SONAR_PCM_BITS_PER_SAMPLE 16U
+#define SONAR_PDM_DECIMATION      (SONAR_ACQ_PDM_HZ / SONAR_PCM_RATE_HZ)
+#define SONAR_PDM_SAMPLES         (SONAR_ACQ_WORDS * 2U)
+#define SONAR_PCM_FRAMES          (SONAR_PDM_SAMPLES / SONAR_PDM_DECIMATION)
+#define SONAR_PCM_SAMPLES         (SONAR_PCM_FRAMES * SONAR_ACQ_CHANNELS)
+#define SONAR_PCM_BYTES           (SONAR_PCM_SAMPLES * sizeof(int16_t))
 
 _Static_assert(SONAR_ACQ_CHANNELS == 16U,
                "sonar_pdm.c is matched to the current 16-channel Vivado packer");
@@ -49,14 +49,11 @@ _Static_assert((SONAR_PDM_SAMPLES % SONAR_PDM_DECIMATION) == 0U,
  * interval are treated as zero only at the two frame edges.
  * Not reentrant: uses module-static work buffers. Call from one task only.
  */
-bool sonar_pdm_to_pcm16_interleaved(const uint8_t *pdm,
-                                    uint32_t pdm_bytes,
-                                    int16_t *pcm,
-                                    uint32_t pcm_sample_capacity,
-                                    uint32_t *pcm_frames_out);
+bool sonar_pdm_to_pcm16_interleaved(const uint8_t *pdm, uint32_t pdm_bytes, int16_t *pcm,
+                                    uint32_t pcm_sample_capacity, uint32_t *pcm_frames_out);
 
 /* Direct-form evaluation of one output sample; the reference for the fast path. */
-int16_t sonar_pdm_reference_sample(const uint32_t *words, uint32_t pdm_samples,
-                                   uint32_t frame, unsigned channel);
+int16_t sonar_pdm_reference_sample(const uint32_t *words, uint32_t pdm_samples, uint32_t frame,
+                                   unsigned channel);
 
 #endif

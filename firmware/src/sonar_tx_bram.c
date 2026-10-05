@@ -8,8 +8,10 @@
  * the amplitude-scaled copy the FPGA plays in bits 15:0. Keeping the original
  * lets the amplitude change without a new upload. */
 #define SAMPLE_STRIDE 4U
-#define CAPACITY ((SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE) < SONAR_TX_MAX_SAMPLES ? \
-                  (SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE) : SONAR_TX_MAX_SAMPLES)
+#define CAPACITY                                                                                   \
+    ((SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE) < SONAR_TX_MAX_SAMPLES                                  \
+         ? (SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE)                                                   \
+         : SONAR_TX_MAX_SAMPLES)
 
 static bool initialized;
 
@@ -20,8 +22,12 @@ uint32_t sonar_tx_bram_capacity(void)
 
 bool sonar_tx_bram_init(void)
 {
-    if (initialized) { return true; }
-    if (SONAR_TX_BRAM_BASEADDR == 0U) { return false; }
+    if (initialized) {
+        return true;
+    }
+    if (SONAR_TX_BRAM_BASEADDR == 0U) {
+        return false;
+    }
     /* The BRAM sits in a 1 MiB section that must be device memory, not cached DDR. */
     Xil_SetTlbAttributes((INTPTR)(SONAR_TX_BRAM_BASEADDR & ~UINT32_C(0xfffff)), DEVICE_MEMORY);
     initialized = true;
@@ -30,11 +36,15 @@ bool sonar_tx_bram_init(void)
 
 bool sonar_tx_bram_write(uint32_t pair, uint32_t packed)
 {
-    if (!initialized || pair >= (CAPACITY + 1U) / 2U) { return false; }
+    if (!initialized || pair >= (CAPACITY + 1U) / 2U) {
+        return false;
+    }
     UINTPTR at = (UINTPTR)SONAR_TX_BRAM_BASEADDR + pair * 2U * SAMPLE_STRIDE;
     uint32_t first = packed & 0xffffU, second = packed >> 16U;
     Xil_Out32(at, (first << 16U) | first);
-    if (pair * 2U + 1U < CAPACITY) { Xil_Out32(at + SAMPLE_STRIDE, (second << 16U) | second); }
+    if (pair * 2U + 1U < CAPACITY) {
+        Xil_Out32(at + SAMPLE_STRIDE, (second << 16U) | second);
+    }
     SYNCHRONIZE_IO;
     return true;
 }

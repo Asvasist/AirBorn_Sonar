@@ -12,7 +12,6 @@ static inline uint64_t sonar_clock_us(void)
      * Evaluate it first: direct division/modulo by that macro changes the
      * arithmetic precedence and can make reported time move backwards. */
     const uint64_t frequency = (uint64_t)(COUNTS_PER_SECOND);
-    return (ticks / frequency) * 1000000U +
-        (ticks % frequency) * 1000000U / frequency;
+    return (ticks / frequency) * 1000000U + (ticks % frequency) * 1000000U / frequency;
 }
 #endif

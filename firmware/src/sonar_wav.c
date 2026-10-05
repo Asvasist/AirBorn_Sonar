@@ -18,9 +18,7 @@ static void put_u32le(uint8_t *p, uint32_t value)
 
 uint32_t sonar_wav_data_bytes(uint32_t pcm_frames)
 {
-    return pcm_frames *
-           SONAR_ACQ_CHANNELS *
-           (SONAR_PCM_BITS_PER_SAMPLE / 8U);
+    return pcm_frames * SONAR_ACQ_CHANNELS * (SONAR_PCM_BITS_PER_SAMPLE / 8U);
 }
 
 uint32_t sonar_wav_total_bytes(uint32_t pcm_frames)
@@ -28,16 +26,14 @@ uint32_t sonar_wav_total_bytes(uint32_t pcm_frames)
     return SONAR_WAV_HEADER_BYTES + sonar_wav_data_bytes(pcm_frames);
 }
 
-bool sonar_wav_write_header(uint8_t out[SONAR_WAV_HEADER_BYTES],
-                            uint32_t pcm_frames)
+bool sonar_wav_write_header(uint8_t out[SONAR_WAV_HEADER_BYTES], uint32_t pcm_frames)
 {
     if (out == NULL) {
         return false;
     }
 
     const uint32_t data_bytes = sonar_wav_data_bytes(pcm_frames);
-    const uint32_t block_align =
-        SONAR_ACQ_CHANNELS * (SONAR_PCM_BITS_PER_SAMPLE / 8U);
+    const uint32_t block_align = SONAR_ACQ_CHANNELS * (SONAR_PCM_BITS_PER_SAMPLE / 8U);
     const uint32_t byte_rate = SONAR_PCM_RATE_HZ * block_align;
 
     memset(out, 0, SONAR_WAV_HEADER_BYTES);

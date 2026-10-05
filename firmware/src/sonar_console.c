@@ -11,15 +11,21 @@ static SemaphoreHandle_t console_mutex;
 
 bool sonar_console_create(void)
 {
-    if (console_mutex != NULL) { return false; }
+    if (console_mutex != NULL) {
+        return false;
+    }
     console_mutex = xSemaphoreCreateMutex();
     return console_mutex != NULL;
 }
 void sonar_console_lock(void)
 {
-    if (xSemaphoreTake(console_mutex, portMAX_DELAY) != pdTRUE) { sonar_halt("console mutex"); }
+    if (xSemaphoreTake(console_mutex, portMAX_DELAY) != pdTRUE) {
+        sonar_halt("console mutex");
+    }
 }
 void sonar_console_unlock(void)
 {
-    if (xSemaphoreGive(console_mutex) != pdTRUE) { sonar_halt("console mutex release"); }
+    if (xSemaphoreGive(console_mutex) != pdTRUE) {
+        sonar_halt("console mutex release");
+    }
 }

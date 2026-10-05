@@ -5,10 +5,21 @@
 #include <stdint.h>
 
 #define SONAR_CODEC_ADDRESS UINT8_C(0x1a)
-#define SONAR_CODEC_WRITES 10U
-typedef enum { SPEAKER_OFF, SPEAKER_CONFIGURING, SPEAKER_READY, SPEAKER_FAULT } sonar_speaker_state_t;
-typedef enum { SPEAKER_OK, SPEAKER_MUTE_FAILED, SPEAKER_WRITE_FAILED,
-    SPEAKER_BUS_ERROR, SPEAKER_TIMEOUT, SPEAKER_CANCELLED } sonar_speaker_fault_t;
+#define SONAR_CODEC_WRITES  10U
+typedef enum {
+    SPEAKER_OFF,
+    SPEAKER_CONFIGURING,
+    SPEAKER_READY,
+    SPEAKER_FAULT
+} sonar_speaker_state_t;
+typedef enum {
+    SPEAKER_OK,
+    SPEAKER_MUTE_FAILED,
+    SPEAKER_WRITE_FAILED,
+    SPEAKER_BUS_ERROR,
+    SPEAKER_TIMEOUT,
+    SPEAKER_CANCELLED
+} sonar_speaker_fault_t;
 typedef enum { SPEAKER_WAIT_POWER, SPEAKER_WAIT_ACK, SPEAKER_WAIT_VMID } sonar_speaker_phase_t;
 
 typedef struct {

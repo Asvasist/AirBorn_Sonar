@@ -28,8 +28,8 @@ typedef struct {
 } sonar_health_t;
 
 bool sonar_health_init(sonar_health_t *health, uint32_t now, uint32_t timeout);
-sonar_health_state_t sonar_health_accept(sonar_health_t *health,
-                                       const sonar_heartbeat_t *event, uint32_t now);
+sonar_health_state_t sonar_health_accept(sonar_health_t *health, const sonar_heartbeat_t *event,
+                                         uint32_t now);
 sonar_health_state_t sonar_health_poll(sonar_health_t *health, uint32_t now);
 void sonar_health_queue_fault(sonar_health_t *health);
 const char *sonar_health_name(sonar_health_state_t state);

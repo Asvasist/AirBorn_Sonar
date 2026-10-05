@@ -16,8 +16,7 @@
  * Write a standard RIFF/WAVE PCM header.
  * The PCM data must immediately follow the 44-byte header.
  */
-bool sonar_wav_write_header(uint8_t out[SONAR_WAV_HEADER_BYTES],
-                            uint32_t pcm_frames);
+bool sonar_wav_write_header(uint8_t out[SONAR_WAV_HEADER_BYTES], uint32_t pcm_frames);
 
 uint32_t sonar_wav_data_bytes(uint32_t pcm_frames);
 uint32_t sonar_wav_total_bytes(uint32_t pcm_frames);

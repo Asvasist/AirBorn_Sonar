@@ -10,26 +10,51 @@
 #include "sonar_wav.h"
 #include <string.h>
 
-#define CHECK(condition) do { if (!(condition)) { return false; } } while (0)
+#define CHECK(condition)                                                                           \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            return false;                                                                          \
+        }                                                                                          \
+    } while (0)
 
 /* ---- sonar_cycle ------------------------------------------------------- */
 
-typedef struct { int capture_result; bool move_ok, stop_ok; int captures, moves, stops; } fake_io_t;
+typedef struct {
+    int capture_result;
+    bool move_ok, stop_ok;
+    int captures, moves, stops;
+} fake_io_t;
 static fake_io_t io_state;
 
 static int fake_capture(void *context, uint32_t cycle, uint64_t *trigger)
 {
-    (void)context; (void)cycle; (void)trigger;
+    (void)context;
+    (void)cycle;
+    (void)trigger;
     ++io_state.captures;
     return io_state.capture_result;
 }
-static bool fake_move(void *context, int32_t steps) { (void)context; (void)steps; ++io_state.moves; return io_state.move_ok; }
-static bool fake_stop(void *context) { (void)context; ++io_state.stops; return io_state.stop_ok; }
+static bool fake_move(void *context, int32_t steps)
+{
+    (void)context;
+    (void)steps;
+    ++io_state.moves;
+    return io_state.move_ok;
+}
+static bool fake_stop(void *context)
+{
+    (void)context;
+    ++io_state.stops;
+    return io_state.stop_ok;
+}
 
 static bool cycle_setup(sonar_cycle_t *c)
 {
-    const sonar_cycle_config_t cfg = {.tx_timeout_us = 60000U, .motor_start_us = 2000000U,
-        .settle_us = 2000000U, .capture_timeout_us = 500000U, .motion_timeout_us = 10000000U};
+    const sonar_cycle_config_t cfg = {.tx_timeout_us = 60000U,
+                                      .motor_start_us = 2000000U,
+                                      .settle_us = 2000000U,
+                                      .capture_timeout_us = 500000U,
+                                      .motion_timeout_us = 10000000U};
     const sonar_cycle_io_t io = {NULL, fake_capture, fake_move, fake_stop};
     io_state = (fake_io_t){1, true, true, 0, 0, 0};
     return sonar_cycle_init(c, &cfg, &io) && sonar_cycle_start(c, 10, 0U);
@@ -107,7 +132,7 @@ static bool frames_round_trip_oldest_first(void)
     CHECK(sonar_frames_publish(&pool, (unsigned)a, &meta));
     CHECK(!sonar_frames_publish(&pool, (unsigned)a, &meta)); /* Not FILLING any more. */
     CHECK(sonar_frames_latest(&pool) == 8U);
-    CHECK(sonar_frames_take(&pool, 7U) == b);  /* Oldest within the batch limit. */
+    CHECK(sonar_frames_take(&pool, 7U) == b); /* Oldest within the batch limit. */
     CHECK(sonar_frames_take(&pool, 7U) == -1);
     CHECK(sonar_frames_finish(&pool, (unsigned)b, false)); /* NAK keeps the frame. */
     CHECK(sonar_frames_take(&pool, 8U) == b);
@@ -119,7 +144,9 @@ static bool frames_pool_exhaustion(void)
 {
     static sonar_frames_t pool;
     memset(&pool, 0, sizeof(pool));
-    for (unsigned i = 0U; i < SONAR_ACQ_POOL_COUNT; ++i) { CHECK(sonar_frames_acquire(&pool) == (int)i); }
+    for (unsigned i = 0U; i < SONAR_ACQ_POOL_COUNT; ++i) {
+        CHECK(sonar_frames_acquire(&pool) == (int)i);
+    }
     return sonar_frames_acquire(&pool) == -1;
 }
 
@@ -160,13 +187,18 @@ static bool console_buffer_returns_complete_lines_and_reports_loss(void)
     uint8_t out[64];
     uint64_t cursor = 0U, lost = 0U;
     memset(&buffer, 0, sizeof(buffer));
-    for (const char *p = "ok\npartial"; *p != '\0'; ++p) { sonar_console_buffer_put(&buffer, (uint8_t)*p); }
+    for (const char *p = "ok\npartial"; *p != '\0'; ++p) {
+        sonar_console_buffer_put(&buffer, (uint8_t)*p);
+    }
     CHECK(sonar_console_buffer_read(&buffer, &cursor, UINT64_MAX, out, sizeof(out), &lost) == 3U);
     CHECK(memcmp(out, "ok\n", 3) == 0 && lost == 0U);
     CHECK(sonar_console_buffer_read(&buffer, &cursor, UINT64_MAX, out, sizeof(out), &lost) == 0U);
-    for (uint32_t i = 0U; i < SONAR_CONSOLE_BUFFER_BYTES; ++i) { sonar_console_buffer_put(&buffer, '\n'); }
+    for (uint32_t i = 0U; i < SONAR_CONSOLE_BUFFER_BYTES; ++i) {
+        sonar_console_buffer_put(&buffer, '\n');
+    }
     CHECK(sonar_console_buffer_read(&buffer, &cursor, UINT64_MAX, out, sizeof(out), &lost) == 0U);
-    return lost == 7U && cursor == buffer.written - SONAR_CONSOLE_BUFFER_BYTES; /* "partial" overwritten. */
+    return lost == 7U &&
+           cursor == buffer.written - SONAR_CONSOLE_BUFFER_BYTES; /* "partial" overwritten. */
 }
 
 /* ---- sonar_number, sonar_scan360 ---------------------------------------- */
@@ -174,7 +206,9 @@ static bool console_buffer_returns_complete_lines_and_reports_loss(void)
 static bool feed(sonar_number_t *n, const char *text, int32_t *value)
 {
     sonar_number_result_t result = NUMBER_WAIT;
-    for (; *text != '\0'; ++text) { result = sonar_number_feed(n, (uint8_t)*text, value); }
+    for (; *text != '\0'; ++text) {
+        result = sonar_number_feed(n, (uint8_t)*text, value);
+    }
     return result == NUMBER_OK;
 }
 
@@ -184,7 +218,8 @@ static bool number_parser(void)
     int32_t value = 0;
     CHECK(feed(&n, "-30\r", &value) && value == -30);
     CHECK(feed(&n, "12\b5\r", &value) && value == 15);
-    CHECK(!feed(&n, "1-2\r", &value) && !feed(&n, "\r", &value) && !feed(&n, "99999999999\r", &value));
+    CHECK(!feed(&n, "1-2\r", &value) && !feed(&n, "\r", &value) &&
+          !feed(&n, "99999999999\r", &value));
     return !feed(&n, "12345678901234567\r", &value) && value == 15;
 }
 
@@ -225,23 +260,31 @@ static bool wav_header_fields(void)
 {
     uint8_t h[SONAR_WAV_HEADER_BYTES];
     CHECK(sonar_wav_write_header(h, SONAR_PCM_FRAMES));
-    CHECK(memcmp(h, "RIFF", 4) == 0 && memcmp(h + 8, "WAVEfmt ", 8) == 0 && memcmp(h + 36, "data", 4) == 0);
+    CHECK(memcmp(h, "RIFF", 4) == 0 && memcmp(h + 8, "WAVEfmt ", 8) == 0 &&
+          memcmp(h + 36, "data", 4) == 0);
     CHECK(sonar_get_u32(h + 24) == 96000U && h[22] == 16U && h[34] == 16U);
-    return sonar_get_u32(h + 40) == SONAR_PCM_BYTES && sonar_get_u32(h + 4) == 36U + SONAR_PCM_BYTES;
+    return sonar_get_u32(h + 40) == SONAR_PCM_BYTES &&
+           sonar_get_u32(h + 4) == 36U + SONAR_PCM_BYTES;
 }
 
 sonar_test_result_t sonar_logic_selftest_run(sonar_test_report_fn report)
 {
-    static const struct { const char *name; bool (*run)(void); } tests[] = {
+    static const struct {
+        const char *name;
+        bool (*run)(void);
+    } tests[] = {
         {"cycle runs trigger, move, settle sequence", cycle_runs_full_sequence},
-        {"cycle waits for buffer and times out capture", cycle_waits_for_buffer_and_times_out_capture},
+        {"cycle waits for buffer and times out capture",
+         cycle_waits_for_buffer_and_times_out_capture},
         {"cycle stop drains in-flight capture", cycle_stop_drains_in_flight_capture},
-        {"cycle faults on clock and peripheral errors", cycle_faults_on_clock_and_peripheral_errors},
+        {"cycle faults on clock and peripheral errors",
+         cycle_faults_on_clock_and_peripheral_errors},
         {"frames round trip oldest first with NAK retry", frames_round_trip_oldest_first},
         {"frames pool exhaustion", frames_pool_exhaustion},
         {"crc32 check value and wire header", crc32_and_header},
         {"control header round trip and rejection", control_header_round_trip_and_rejection},
-        {"console buffer lines and loss report", console_buffer_returns_complete_lines_and_reports_loss},
+        {"console buffer lines and loss report",
+         console_buffer_returns_complete_lines_and_reports_loss},
         {"number parser", number_parser},
         {"scan moves sum to one revolution", scan_moves_sum_to_one_revolution},
         {"chirp parameter calculation", chirp_parameters},
@@ -251,7 +294,11 @@ sonar_test_result_t sonar_logic_selftest_run(sonar_test_report_fn report)
     for (size_t i = 0U; i < sizeof(tests) / sizeof(tests[0]); ++i) {
         bool passed = tests[i].run();
         report(tests[i].name, passed);
-        if (passed) { ++result.passed; } else { ++result.failed; }
+        if (passed) {
+            ++result.passed;
+        } else {
+            ++result.failed;
+        }
     }
     return result;
 }

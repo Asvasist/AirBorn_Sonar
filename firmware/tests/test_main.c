@@ -11,9 +11,8 @@ static void report(const char *name, bool passed)
 int main(void)
 {
     sonar_test_result_t (*const suites[])(sonar_test_report_fn) = {
-        sonar_selftest_run, sonar_mic_selftest_run,
-        sonar_speaker_selftest_run, sonar_codec_selftest_run, sonar_pdm_selftest_run,
-        sonar_logic_selftest_run,
+        sonar_selftest_run,       sonar_mic_selftest_run, sonar_speaker_selftest_run,
+        sonar_codec_selftest_run, sonar_pdm_selftest_run, sonar_logic_selftest_run,
     };
     sonar_test_result_t total = {0U, 0U};
     for (size_t i = 0U; i < sizeof(suites) / sizeof(suites[0]); ++i) {

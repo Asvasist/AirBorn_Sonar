@@ -2,7 +2,12 @@
 #include "sonar_pdm.h"
 #include <string.h>
 
-#define CHECK(condition) do { if (!(condition)) { return false; } } while (0)
+#define CHECK(condition)                                                                           \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            return false;                                                                          \
+        }                                                                                          \
+    } while (0)
 
 static uint32_t pdm[SONAR_ACQ_WORDS];
 static int16_t pcm[SONAR_PCM_SAMPLES];
@@ -17,8 +22,8 @@ static void fill_random(uint32_t seed)
 
 static bool convert(uint32_t *frames)
 {
-    return sonar_pdm_to_pcm16_interleaved((const uint8_t *)pdm, sizeof(pdm), pcm,
-                                          SONAR_PCM_SAMPLES, frames);
+    return sonar_pdm_to_pcm16_interleaved((const uint8_t *)pdm, sizeof(pdm), pcm, SONAR_PCM_SAMPLES,
+                                          frames);
 }
 
 /* Every output sample, including the zero-padded edges, matches the direct form. */
@@ -54,7 +59,9 @@ static bool channels_are_independent(void)
 {
     uint32_t frames = 0U;
     const uint32_t middle = (SONAR_PCM_FRAMES / 2U) * SONAR_ACQ_CHANNELS;
-    for (uint32_t i = 0U; i < SONAR_ACQ_WORDS; ++i) { pdm[i] = 0x00200020U; } /* ch 5 high */
+    for (uint32_t i = 0U; i < SONAR_ACQ_WORDS; ++i) {
+        pdm[i] = 0x00200020U;
+    } /* ch 5 high */
     CHECK(convert(&frames));
     for (unsigned channel = 0U; channel < SONAR_ACQ_CHANNELS; ++channel) {
         CHECK(pcm[middle + channel] == (channel == 5U ? INT16_MAX : INT16_MIN));
@@ -69,14 +76,18 @@ static bool invalid_arguments_rejected(void)
     CHECK(!sonar_pdm_to_pcm16_interleaved(NULL, sizeof(pdm), pcm, SONAR_PCM_SAMPLES, &frames));
     CHECK(!sonar_pdm_to_pcm16_interleaved(bytes + 1, 64U, pcm, SONAR_PCM_SAMPLES, &frames));
     CHECK(!sonar_pdm_to_pcm16_interleaved(bytes, 6U, pcm, SONAR_PCM_SAMPLES, &frames));
-    CHECK(!sonar_pdm_to_pcm16_interleaved(bytes, sizeof(pdm), pcm, SONAR_PCM_SAMPLES - 1U, &frames));
+    CHECK(
+        !sonar_pdm_to_pcm16_interleaved(bytes, sizeof(pdm), pcm, SONAR_PCM_SAMPLES - 1U, &frames));
     CHECK(!sonar_pdm_to_pcm16_interleaved(bytes, sizeof(pdm) + 400U, pcm, UINT32_MAX, &frames));
     return frames == 77U;
 }
 
 sonar_test_result_t sonar_pdm_selftest_run(sonar_test_report_fn report)
 {
-    static const struct { const char *name; bool (*run)(void); } tests[] = {
+    static const struct {
+        const char *name;
+        bool (*run)(void);
+    } tests[] = {
         {"pdm fast path matches direct-form reference", fast_path_matches_reference},
         {"pdm constant input is full scale", constant_input_is_full_scale},
         {"pdm channels are independent", channels_are_independent},
@@ -86,7 +97,11 @@ sonar_test_result_t sonar_pdm_selftest_run(sonar_test_report_fn report)
     for (size_t i = 0U; i < sizeof(tests) / sizeof(tests[0]); ++i) {
         bool passed = tests[i].run();
         report(tests[i].name, passed);
-        if (passed) { ++result.passed; } else { ++result.failed; }
+        if (passed) {
+            ++result.passed;
+        } else {
+            ++result.failed;
+        }
     }
     return result;
 }

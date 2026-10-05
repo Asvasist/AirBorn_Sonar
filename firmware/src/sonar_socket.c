@@ -33,7 +33,9 @@ int sonar_socket_open(int type, uint16_t port)
     address.sin_addr.s_addr = INADDR_ANY;
 
     int fd = lwip_socket(AF_INET, type, 0);
-    if (fd < 0) { return -1; }
+    if (fd < 0) {
+        return -1;
+    }
     if (!sonar_socket_nonblocking(fd) ||
         lwip_bind(fd, (struct sockaddr *)&address, sizeof(address)) < 0 ||
         (type == SOCK_STREAM && lwip_listen(fd, 1) < 0)) {
@@ -52,9 +54,17 @@ sonar_socket_status_t sonar_socket_transfer(int fd, uint8_t *data, uint32_t leng
     while (count < length) {
         int n = sending ? lwip_send(fd, data + count, length - count, 0)
                         : lwip_recv(fd, data + count, length - count, 0);
-        if (n == 0) { status = SONAR_SOCKET_CLOSED; break; }
-        if (n < 0 && !sonar_socket_would_block(errno)) { status = SONAR_SOCKET_FAILED; break; }
-        if (n > 0) { count += (uint32_t)n; }
+        if (n == 0) {
+            status = SONAR_SOCKET_CLOSED;
+            break;
+        }
+        if (n < 0 && !sonar_socket_would_block(errno)) {
+            status = SONAR_SOCKET_FAILED;
+            break;
+        }
+        if (n > 0) {
+            count += (uint32_t)n;
+        }
         /* One deadline bounds the whole transfer, including a slow trickle. */
         if (count < length &&
             (TickType_t)(xTaskGetTickCount() - began) >= pdMS_TO_TICKS(timeout_ms)) {
@@ -62,10 +72,14 @@ sonar_socket_status_t sonar_socket_transfer(int fd, uint8_t *data, uint32_t leng
             break;
         }
         if (n < 0) {
-            if (idle != NULL) { idle(); }
+            if (idle != NULL) {
+                idle();
+            }
             vTaskDelay(1U);
         }
     }
-    if (done != NULL) { *done = count; }
+    if (done != NULL) {
+        *done = count;
+    }
     return status;
 }

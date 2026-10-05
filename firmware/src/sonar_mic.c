@@ -5,20 +5,23 @@ bool sonar_mic_init(sonar_mic_t *capture, const sonar_mic_config_t *config,
                     const sonar_mic_io_t *io, uint8_t *buffer, uint32_t capacity)
 {
     uint32_t span;
-    if (capture == NULL) { return false; }
+    if (capture == NULL) {
+        return false;
+    }
     *capture = (sonar_mic_t){0};
     capture->state = MIC_FAULT;
     capture->fault = MIC_BAD_CONFIG;
-    if (config == NULL || io == NULL || buffer == NULL ||
-        io->prepare == NULL || io->arm == NULL || io->trigger == NULL ||
-        io->finish == NULL || io->abort == NULL || config->bytes == 0U ||
+    if (config == NULL || io == NULL || buffer == NULL || io->prepare == NULL || io->arm == NULL ||
+        io->trigger == NULL || io->finish == NULL || io->abort == NULL || config->bytes == 0U ||
         config->bytes > SONAR_MIC_MAX_DMA_BYTES || config->bytes % 4U != 0U ||
         config->timeout_ticks == 0U || config->timeout_ticks > UINT32_MAX / 2U ||
         config->pdm_hz == 0U || (uintptr_t)buffer % SONAR_MIC_CACHE_LINE != 0U) {
         return false;
     }
     span = (config->bytes + SONAR_MIC_CACHE_LINE - 1U) & ~(SONAR_MIC_CACHE_LINE - 1U);
-    if (capacity < span) { return false; }
+    if (capacity < span) {
+        return false;
+    }
     capture->config = *config;
     capture->io = *io;
     capture->buffer = buffer;
@@ -30,7 +33,9 @@ bool sonar_mic_init(sonar_mic_t *capture, const sonar_mic_config_t *config,
 
 static void fail(sonar_mic_t *capture, sonar_mic_fault_t cause)
 {
-    if (capture->state == MIC_FAULT) { return; }
+    if (capture->state == MIC_FAULT) {
+        return;
+    }
     capture->state = MIC_FAULT;
     capture->fault = cause;
     if (capture->dma_owned && capture->io.abort(capture->io.context)) {
@@ -41,7 +46,9 @@ static void fail(sonar_mic_t *capture, sonar_mic_fault_t cause)
 
 bool sonar_mic_start(sonar_mic_t *capture, uint32_t now)
 {
-    if (capture == NULL || capture->state != MIC_IDLE) { return false; }
+    if (capture == NULL || capture->state != MIC_IDLE) {
+        return false;
+    }
     capture->started = now;
     capture->overflow_checked = false;
     ++capture->generation;
@@ -53,7 +60,7 @@ bool sonar_mic_start(sonar_mic_t *capture, uint32_t now)
     /* An arm failure may follow partial register writes: assume DMA owns memory. */
     capture->dma_owned = true;
     if (!capture->io.arm(capture->io.context, capture->buffer, capture->config.bytes,
-                          capture->generation)) {
+                         capture->generation)) {
         fail(capture, MIC_ARM_FAILED);
         return false;
     }
@@ -67,10 +74,14 @@ bool sonar_mic_start(sonar_mic_t *capture, uint32_t now)
 void sonar_mic_event(sonar_mic_t *capture, const sonar_mic_event_t *event, uint32_t now)
 {
     if (capture == NULL || event == NULL || capture->state != MIC_CAPTURING ||
-        event->generation != capture->generation) { return; }
-    if ((event->flags & SONAR_MIC_IRQ_ERROR) != 0U) { fail(capture, MIC_DMA_ERROR); }
-    else if ((event->flags & SONAR_MIC_IRQ_OVERFLOW) != 0U) { fail(capture, MIC_OVERFLOW); }
-    else if ((event->flags & SONAR_MIC_IRQ_DONE) != 0U) {
+        event->generation != capture->generation) {
+        return;
+    }
+    if ((event->flags & SONAR_MIC_IRQ_ERROR) != 0U) {
+        fail(capture, MIC_DMA_ERROR);
+    } else if ((event->flags & SONAR_MIC_IRQ_OVERFLOW) != 0U) {
+        fail(capture, MIC_OVERFLOW);
+    } else if ((event->flags & SONAR_MIC_IRQ_DONE) != 0U) {
         if ((uint32_t)(now - capture->started) >= capture->config.timeout_ticks ||
             (uint32_t)(event->tick - capture->started) >= capture->config.timeout_ticks ||
             (uint32_t)(now - event->tick) > UINT32_MAX / 2U) {
@@ -97,37 +108,54 @@ void sonar_mic_poll(sonar_mic_t *capture, uint32_t now)
 }
 void sonar_mic_cancel(sonar_mic_t *capture)
 {
-    if (capture != NULL && capture->state == MIC_CAPTURING) { fail(capture, MIC_CANCELLED); }
+    if (capture != NULL && capture->state == MIC_CAPTURING) {
+        fail(capture, MIC_CANCELLED);
+    }
 }
 bool sonar_mic_frame(const sonar_mic_t *capture, sonar_mic_frame_t *frame)
 {
     if (capture == NULL || frame == NULL || capture->state != MIC_READY || capture->dma_owned) {
         return false;
     }
-    *frame = (sonar_mic_frame_t){capture->buffer, capture->config.bytes, capture->generation,
-        capture->started, capture->completed, capture->config.pdm_hz, capture->overflow_checked};
+    *frame = (sonar_mic_frame_t){
+        capture->buffer,    capture->config.bytes,  capture->generation,      capture->started,
+        capture->completed, capture->config.pdm_hz, capture->overflow_checked};
     return true;
 }
 bool sonar_mic_release(sonar_mic_t *capture)
 {
-    if (capture == NULL || capture->state != MIC_READY || capture->dma_owned) { return false; }
+    if (capture == NULL || capture->state != MIC_READY || capture->dma_owned) {
+        return false;
+    }
     capture->state = MIC_IDLE;
     return true;
 }
 const char *sonar_mic_fault_name(sonar_mic_fault_t fault)
 {
     switch (fault) {
-    case MIC_OK: return "OK";
-    case MIC_BAD_CONFIG: return "CONFIG";
-    case MIC_PREPARE_FAILED: return "PREPARE";
-    case MIC_ARM_FAILED: return "DMA_ARM";
-    case MIC_TRIGGER_FAILED: return "TRIGGER";
-    case MIC_DMA_ERROR: return "DMA_ERROR";
-    case MIC_OVERFLOW: return "PL_OVERFLOW";
-    case MIC_BAD_LENGTH: return "FRAME_LENGTH";
-    case MIC_TIMEOUT: return "TIMEOUT";
-    case MIC_FINISH_FAILED: return "DMA_FINISH";
-    case MIC_CANCELLED: return "CANCELLED";
-    default: return "UNKNOWN";
+    case MIC_OK:
+        return "OK";
+    case MIC_BAD_CONFIG:
+        return "CONFIG";
+    case MIC_PREPARE_FAILED:
+        return "PREPARE";
+    case MIC_ARM_FAILED:
+        return "DMA_ARM";
+    case MIC_TRIGGER_FAILED:
+        return "TRIGGER";
+    case MIC_DMA_ERROR:
+        return "DMA_ERROR";
+    case MIC_OVERFLOW:
+        return "PL_OVERFLOW";
+    case MIC_BAD_LENGTH:
+        return "FRAME_LENGTH";
+    case MIC_TIMEOUT:
+        return "TIMEOUT";
+    case MIC_FINISH_FAILED:
+        return "DMA_FINISH";
+    case MIC_CANCELLED:
+        return "CANCELLED";
+    default:
+        return "UNKNOWN";
     }
 }
