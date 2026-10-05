@@ -79,7 +79,7 @@ static bool emit_frame(void)
     if (parser.samples>=sonar_tx_bram_capacity()) { return false; }
     parser.pcm_crc=crc_byte(crc_byte(parser.pcm_crc,(uint8_t)pcm),(uint8_t)(pcm>>8U));
     if ((parser.samples & 1U)==0U) { parser.pending_word=pcm; }
-    else if (!sonar_tx_bram_write(0U,parser.samples/2U,parser.pending_word|((uint32_t)pcm<<16U))) { return false; }
+    else if (!sonar_tx_bram_write(parser.samples/2U,parser.pending_word|((uint32_t)pcm<<16U))) { return false; }
     ++parser.samples; parser.frame_used=0;
     return true;
 }
@@ -156,8 +156,7 @@ bool sonar_waveform_commit(void)
     if (locked || !uploading || parser.received!=parser.file_bytes || !parser.fmt_seen || !parser.data_seen ||
         parser.phase!=CHUNK_HEADER || parser.used!=0U || parser.frame_used!=0U || parser.samples==0U) { return false; }
     if (~parser.file_crc!=parser.expected_crc) { uploading=false; return false; }
-    if ((parser.samples & 1U)!=0U && !sonar_tx_bram_write(0U,parser.samples/2U,parser.pending_word)) { return false; }
-    sonar_tx_bram_fence();
+    if ((parser.samples & 1U)!=0U && !sonar_tx_bram_write(parser.samples/2U,parser.pending_word)) { return false; }
     current_id=++next_id; current_samples=parser.samples; current_crc=~parser.pcm_crc;
     uploading=false; return true;
 }
@@ -168,8 +167,3 @@ uint32_t sonar_waveform_received(void) { return parser.received; }
 uint32_t sonar_waveform_id(void) { return current_id; }
 uint32_t sonar_waveform_samples(void) { return current_samples; }
 uint32_t sonar_waveform_crc(void) { return current_crc; }
-bool sonar_waveform_offset(uint32_t id, uint32_t *offset)
-{
-    if (id==0U || id!=current_id || offset==NULL) { return false; }
-    *offset=sonar_tx_bram_offset(0U); return true;
-}

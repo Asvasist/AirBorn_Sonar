@@ -4,7 +4,6 @@
 #include "sonar_pl_gpio.h"
 #include "sonar_speaker_board.h"
 #include "sonar_clock.h"
-#include "sonar_wav_board_config.h"
 #include "sonar_wav_player.h"
 #include "sonar_waveform.h"
 #include "FreeRTOS.h"
@@ -17,25 +16,13 @@ static uint32_t duration_us;
 static uint64_t started_us;
 static sonar_tx_mode_t mode=SONAR_TX_GENERATE;
 
-/* Generated chirps retain their previous timing estimate. WAV uses a real
- * sticky last-sample DONE when mapped; otherwise it reports estimated timing. */
+/* Neither source reports completion, so playback ends a fixed time after the
+ * trigger: the configured duration plus the FPGA start margin. */
 static void poll_tx(void)
 {
     if (!running) { return; }
     uint64_t elapsed=sonar_clock_us()-started_us;
     uint64_t end=(uint64_t)duration_us+SONAR_TX_START_MARGIN_US;
-    if (mode==SONAR_TX_WAV) {
-        if (sonar_wav_player_error()) { fault=true; running=false; return; }
-        if (sonar_wav_player_has_done()) {
-            if (sonar_wav_player_done()) { running=false; completed=true; }
-            else if (elapsed>end+SONAR_TX_TIMEOUT_MARGIN_US) { fault=true; running=false; }
-            return;
-        }
-        if (sonar_wav_player_busy()) {
-            if (elapsed>end+SONAR_TX_TIMEOUT_MARGIN_US) { fault=true; running=false; }
-            return;
-        }
-    }
     if (elapsed>=end) {
         running = false;
         completed = true;
@@ -55,8 +42,7 @@ bool sonar_chirp_init(void)
     Xil_Out32((UINTPTR)SONAR_CHIRP_CONTROL_BASEADDR + 4U, 0U);
     Xil_Out32((UINTPTR)SONAR_CHIRP_CONTROL_BASEADDR + 12U, 0U);
     SYNCHRONIZE_IO;
-    bool wav=sonar_wav_player_init();
-    if (SONAR_WAV_ENABLED && !wav) { return false; }
+    if (!sonar_wav_player_init()) { return false; }
     initialized = true;
     return true;
 }
@@ -65,16 +51,13 @@ uint32_t sonar_chirp_capabilities(void)
 {
     if (!initialized || fault) { return 0U; }
     uint32_t caps=AUDIO_CAP_GENERATE;
-    if (sonar_wav_player_available()) { caps|=AUDIO_CAP_WAV; }
-    if (sonar_wav_player_has_gain()) { caps|=AUDIO_CAP_WAV_GAIN; }
-    if (sonar_wav_player_has_done()) { caps|=AUDIO_CAP_WAV_DONE; }
+    if (sonar_wav_player_available()) { caps|=AUDIO_CAP_WAV|AUDIO_CAP_WAV_GAIN; }
     return caps;
 }
 
 uint32_t sonar_chirp_status(void)
 {
     poll_tx();
-    /* Protocol state; WAV completion/errors may come from mapped PL status. */
     return (applied ? AUDIO_CONFIG_VALID : 0U) |
            (prepared ? AUDIO_READY : 0U) |
            (running ? AUDIO_TX_BUSY : 0U) |
@@ -129,7 +112,6 @@ bool sonar_chirp_prepare(void)
         fault = true;
         return false;
     }
-    if (mode==SONAR_TX_WAV && !sonar_wav_player_prepare()) { fault=true; return false; }
     completed = aborted = false;
     prepared = true;
     return true;
@@ -164,8 +146,7 @@ bool sonar_chirp_abort(void)
     prepared = false;
     if (!muted || !low) { fault = true; return false; }
 
-    if (running && mode==SONAR_TX_WAV && sonar_wav_player_abort()) { running=false; }
-    /* Without an observable hardware abort, mute and drain finite playback. */
+    /* There is no hardware abort: mute, then let the finite playback drain. */
     TickType_t start = xTaskGetTickCount();
     poll_tx();
     while (running) {

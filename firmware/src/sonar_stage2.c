@@ -15,7 +15,6 @@
 #include "sonar_waveform.h"
 #include "sonar_control_server.h"
 #include "sonar_audio_hw.h"
-#include "sonar_wav_board_config.h"
 #include "sonar_wav_player.h"
 #include "sonar_tx_bram.h"
 #include "FreeRTOS.h"
@@ -206,10 +205,8 @@ static void experiment_task(void *unused)
         startup_result(motor_bus_ok,tic_ok),startup_result(tic_ok,mode_ok));
     xil_printf("INIT AUDIO: %s capabilities=0x%x; TCP 5003 configuration required before R.\r\n",
         audio_ok?"PASS":"UNAVAILABLE",(unsigned)sonar_chirp_capabilities());
-    xil_printf("INIT WAV: %s max_samples=%u gain=%s completion=%s; RX remains 50 ms.\r\n",
-        sonar_wav_player_available()?"READY":(SONAR_WAV_ENABLED?"MAPPING_INVALID":"DISABLED_IN_CONFIG"),
-        (unsigned)sonar_tx_bram_capacity(),sonar_wav_player_has_gain()?(SONAR_WAV_GAIN_REG?"FPGA_LINEAR":"SOFTWARE_BRAM"):"100_PERCENT_ONLY",
-        sonar_wav_player_has_done()?"FPGA_DONE":"TIME_ESTIMATE");
+    xil_printf("INIT WAV: %s max_samples=%u; RX remains 50 ms.\r\n",
+        sonar_wav_player_available()?"READY":"UNAVAILABLE",(unsigned)sonar_tx_bram_capacity());
     sonar_console_unlock();
     while (ok && sonar_speaker_board_state()->state==SPEAKER_CONFIGURING) {
         sonar_speaker_board_poll((uint32_t)xTaskGetTickCount()); vTaskDelay(1);

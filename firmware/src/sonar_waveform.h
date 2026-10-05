@@ -18,5 +18,4 @@ uint32_t sonar_waveform_received(void);
 uint32_t sonar_waveform_id(void);
 uint32_t sonar_waveform_samples(void);
 uint32_t sonar_waveform_crc(void); /* CRC of converted PCM16, excludes pad. */
-bool sonar_waveform_offset(uint32_t id, uint32_t *bram_offset);
 #endif
