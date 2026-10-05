@@ -158,7 +158,7 @@ class SonarApp:
         self.stop_button.grid(row=0, column=4)
         self.disconnect_button = ttk.Button(run, text="Disconnect", command=self.request_disconnect)
         self.disconnect_button.grid(row=0, column=5, padx=(8, 0))
-        ttk.Label(run, text="Choose 30, 60, 90 ... up to 800 positions. One run always totals exactly 800 Tic units = 360°.").grid(
+        ttk.Label(run, text="Choose 1 to 1000 positions. One run always turns exactly 360°.").grid(
             row=1, column=0, columnspan=6, sticky="w", pady=(10, 0))
         status = ttk.Frame(panel)
         status.grid(row=5, column=0, sticky="ew")
@@ -554,7 +554,7 @@ class SonarApp:
         elif c.error:
             hint = c.error
         elif c.can_start:
-            hint = "Ready. Enter positions per 360°, choose direction and click Start experiment. Keep divisor 1 for the current 800-unit calibration."
+            hint = "Ready. Enter positions per 360°, choose direction and click Start experiment. Keep divisor 1; the 360° calibration assumes full steps."
         elif c.can_configure:
             hint = "Choose Generate chirp or Upload WAV, then apply the audio settings before starting the scan."
         elif c.phase != "idle":

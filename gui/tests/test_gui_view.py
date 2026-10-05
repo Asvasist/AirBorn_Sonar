@@ -52,7 +52,7 @@ class GuiViewTests(unittest.TestCase):
             app.start()
             self.assertEqual(job.call_args.args[0], "verify")
         app.handle_audio(app.audio_token, "verify", APPLIED)
-        app.handle("line", "Enter signed positions per 360 degrees (1..800), then Enter:")
+        app.handle("line", "Enter signed positions per 360 degrees (1..1000), then Enter:")
         app.handle("line", "Positions-per-revolution stored.")
         app.handle("line", status(steps=45))
         app.handle("line", status("ACQUIRE", steps=45, used=1))

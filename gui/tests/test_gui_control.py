@@ -28,7 +28,7 @@ class GuiControlTests(unittest.TestCase):
 
     def enter_value(self, steps="45", reverse=False):
         self.c.start(steps, reverse)
-        self.c.line("Enter signed positions per 360 degrees (1..800), then Enter:")
+        self.c.line("Enter signed positions per 360 degrees (1..1000), then Enter:")
         self.c.line("Positions-per-revolution stored. Press R for one complete 360-degree scan; X stops.")
 
     def test_start_requires_network_and_fresh_idle_and_board_receiver(self):
@@ -64,9 +64,9 @@ class GuiControlTests(unittest.TestCase):
         for value in ("0", "100001", "-20", "1.5", "NaN", "20\rr", "", "999999999"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_steps(value)
-        self.assertEqual(parse_steps(" 800 "), 800)
+        self.assertEqual(parse_steps(" 1000 "), 1000)
         with self.assertRaises(ValueError):
-            parse_steps("801")
+            parse_steps("1001")
 
     def test_mismatch_or_receiver_lost_never_starts(self):
         self.enter_value()
@@ -77,7 +77,7 @@ class GuiControlTests(unittest.TestCase):
     def test_stop_cancels_pending_prompt_and_late_confirmation(self):
         self.c.start("45")
         self.c.stop()
-        self.c.line("Enter signed positions per 360 degrees (1..800), then Enter:")
+        self.c.line("Enter signed positions per 360 degrees (1..1000), then Enter:")
         self.c.line("Positions-per-revolution stored.")
         self.c.line(status(steps=45))
         self.assertNotIn(b"r", self.sent)

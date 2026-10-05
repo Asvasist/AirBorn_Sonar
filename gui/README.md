@@ -28,7 +28,7 @@ py -3 -m venv .venv
 3. Choose **Generate chirp** (start/stop frequency, duration, amplitude) or
    **Upload WAV**, then **Apply**. WAV files at other rates are resampled to
    96 kHz before upload.
-4. Enter the number of capture positions per revolution (1–800) and **Start**.
+4. Enter the number of capture positions per revolution (1–1000) and **Start**.
    The board performs one 360° scan and stops by itself. **Stop** aborts.
 
 Transmit is limited to 49 ms; each capture is 50 ms of 16-channel audio,

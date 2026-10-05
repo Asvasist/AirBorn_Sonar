@@ -11,12 +11,12 @@ AUDIO_STATUS = re.compile(r"config=(\d+) mode=(GENERATE|WAV) tx_us=(\d+) amplitu
 def parse_steps(text, reverse=False):
     """Parse capture positions per complete 360-degree revolution.
 
-    The firmware maps N positions onto exactly 800 Tic position units.
+    The firmware divides one calibrated revolution into N moves.
     A negative value is sent when reverse direction is selected.
     """
     value = str(text).strip()
-    if not re.fullmatch(r"[0-9]{1,3}", value) or not 1 <= int(value) <= 800:
-        raise ValueError("Enter a whole number of positions from 1 to 800.")
+    if not re.fullmatch(r"[0-9]{1,4}", value) or not 1 <= int(value) <= 1000:
+        raise ValueError("Enter a whole number of positions from 1 to 1000.")
     return -int(value) if reverse else int(value)
 
 
@@ -126,7 +126,7 @@ class ExperimentControl:
             self.phase = "idle"
             self.error = line
             return
-        if self.phase == "prompt" and "Enter signed positions per 360 degrees (1..800), then Enter:" in line:
+        if self.phase == "prompt" and "Enter signed positions per 360 degrees (1..1000), then Enter:" in line:
             if not self.ethernet_up:
                 self.stop()
                 return

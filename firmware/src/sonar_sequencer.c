@@ -39,6 +39,7 @@ static sonar_scan360_t scan360;
 static bool motor_ready;
 static bool waiting_for_buffer;
 static void message(const char *s);
+#define xil_printf_locked(...) do { sonar_console_lock(); xil_printf(__VA_ARGS__); sonar_console_unlock(); } while (0)
 
 static uint64_t now_us(void)
 {
@@ -229,7 +230,8 @@ static void experiment_task(void *unused)
     } else {
         message("READY: codec writes, DMA setup and Tic communication checked; acoustic/motion tests require a run.");
         message("n: enter signed positions per 360 degrees then Enter; v: enter divisor; r: run one revolution; x: stop; s: status; ?: help");
-        message("Example: n 30 gives 30 capture positions and exactly 800 Tic position units over 360 degrees. Sign selects direction.");
+        xil_printf_locked("Example: n 30 gives 30 capture positions over one revolution (%u Tic position units). Sign selects direction.\r\n",
+            (unsigned)SONAR_SCAN360_REVOLUTION_STEPS);
         message("TX: fixed 96 kHz, GENERATE or BRAM WAV; max 49 ms / BRAM capacity. RX: 50 ms, PCM 96 kHz.");
         message("Motor deadline 2000 ms from trigger; settle 2000 ms after movement.");
         sonar_console_lock();
@@ -255,7 +257,7 @@ static void experiment_task(void *unused)
         uint8_t key;
         for (unsigned budget=0;budget<16U && xQueueReceive(keys,&key,0)==pdPASS;++budget) {
             if (key=='s') { report(); continue; }
-            if (key=='?') { message("n <signed positions 1..800> Enter; v <1/2/4/8/16/32/64/128/256> Enter; r one 360-degree scan; x stop; s status"); continue; }
+            if (key=='?') { message("n <signed positions 1..1000> Enter; v <1/2/4/8/16/32/64/128/256> Enter; r one 360-degree scan; x stop; s status"); continue; }
             if (prompt!=0) {
                 /* Accept terminals that append Enter to the n/v command itself. */
                 if ((key=='\r' || key=='\n') && number.length==0 && !number.invalid) { continue; }
@@ -274,7 +276,7 @@ static void experiment_task(void *unused)
             }
             if ((key=='n' || key=='v') && idle()) {
                 prompt=key; number=(sonar_number_t){0};
-                message(key=='n'?"Enter signed positions per 360 degrees (1..800), then Enter:":"Enter step divisor, then Enter (1 = full steps):");
+                message(key=='n'?"Enter signed positions per 360 degrees (1..1000), then Enter:":"Enter step divisor, then Enter (1 = full steps):");
             } else if (key=='r') {
                 if (!fatal && requested_positions!=0 && idle() && sonar_experiment_can_start()) {
                     const sonar_chirp_values_t *tv=sonar_experiment_values();
@@ -282,7 +284,7 @@ static void experiment_task(void *unused)
                     sonar_scan360_begin(&scan360);
                     if (sonar_cycle_start(&cycle,requested_positions,now_us())) {
                         sonar_experiment_running(true);
-                        message("RUN: one 360-degree scan started; selected capture positions share exactly 800 Tic position units."); report();
+                        message("RUN: one 360-degree scan started."); report();
                     } else { message("Cannot start: wait for STOPPED; faults require reset."); }
                 }
                 else if (!idle() && cycle.state!=CYCLE_FAULT) { message("Already running; X stops the current 360-degree scan."); }

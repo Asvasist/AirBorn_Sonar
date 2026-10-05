@@ -38,7 +38,8 @@ int32_t sonar_scan360_next_delta(const sonar_scan360_t *scan)
     const uint32_t k = scan->moves_started + 1U;
 
     /* Round cumulative targets, then subtract adjacent targets. This makes
-     * the N relative moves sum to exactly 800 even when 800/N is fractional. */
+     * the N relative moves sum to exactly one revolution even when it is not
+     * divisible by N. */
     const uint32_t previous = (uint32_t)(((uint64_t)(k - 1U) * SONAR_SCAN360_REVOLUTION_STEPS + n / 2U) / n);
     const uint32_t next = (uint32_t)(((uint64_t)k * SONAR_SCAN360_REVOLUTION_STEPS + n / 2U) / n);
     const int32_t delta = (int32_t)(next - previous);
