@@ -4,6 +4,7 @@
 #include "sonar_clock.h"
 #include "sonar_control_server.h"
 #include "sonar_tcp_console.h"
+#include "sonar_socket.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "lwip/init.h"
@@ -19,12 +20,6 @@
  * LWIP_PROVIDE_ERRNO build writes the global lwIP errno instead. */
 #include "lwip/errno.h"
 
-#if !LWIP_SOCKET || NO_SYS
-#error "Enable lwip220 SOCKET_API in the FreeRTOS domain and rebuild the platform."
-#endif
-#if LWIP_PROVIDE_ERRNO && defined(errno)
-#error "Do not mix Newlib errno with the BSP's global lwIP socket errno."
-#endif
 #if INCLUDE_vTaskPrioritySet != 1 || INCLUDE_uxTaskPriorityGet != 1
 #error "Enable FreeRTOS task priority get/set for background Ethernet initialization."
 #endif
@@ -37,22 +32,13 @@ static void connection(bool value)
 { taskENTER_CRITICAL(); connected=value; taskEXIT_CRITICAL(); }
 static void note(const char *s)
 { sonar_console_lock(); xil_printf("ETH %s\r\n",s); sonar_console_unlock(); }
-static bool nonblocking(int fd)
-{ unsigned long on=1; return lwip_ioctl(fd,FIONBIO,&on)==0; }
 
 /* Discovery is read-only: it reports the board address, never changes either
  * computer's network configuration. All socket calls stay in this task. */
 static void discovery_start(void)
 {
-    struct sockaddr_in address;
-    memset(&address,0,sizeof(address)); address.sin_family=AF_INET;
-    address.sin_port=htons(SONAR_NET_DISCOVERY_PORT); address.sin_addr.s_addr=INADDR_ANY;
-    discovery_fd=lwip_socket(AF_INET,SOCK_DGRAM,0);
-    if (discovery_fd<0 || !nonblocking(discovery_fd) ||
-        lwip_bind(discovery_fd,(struct sockaddr *)&address,sizeof(address))<0) {
-        if (discovery_fd>=0) { lwip_close(discovery_fd); }
-        discovery_fd=-1; note("discovery unavailable; use the printed IP with --board.");
-    }
+    discovery_fd=sonar_socket_open(SOCK_DGRAM,SONAR_NET_DISCOVERY_PORT);
+    if (discovery_fd<0) { note("discovery unavailable; use the printed IP with --board."); }
 }
 static void discovery_poll(void)
 {
@@ -79,20 +65,14 @@ static void transfer_fault(const char *part, const char *reason, int error, uint
 static bool transfer(int fd, uint8_t *data, uint32_t length, bool send_data,
                      TickType_t began, const char *part)
 {
+    static const char *const reason[]={"done","peer closed","socket failure","deadline expired"};
     uint32_t done=0;
-    while (done<length) {
-        if ((TickType_t)(xTaskGetTickCount()-began)>=pdMS_TO_TICKS(SONAR_NET_DEADLINE_MS)) {
-            transfer_fault(part,"deadline expired",0,done); return false;
-        }
-        int n=send_data?lwip_send(fd,data+done,length-done,0):lwip_recv(fd,data+done,length-done,0);
-        int error=n<0?errno:0;
-        if (n>0) { done+=(uint32_t)n; }
-        else if (n==0 || (error!=EWOULDBLOCK && error!=EAGAIN && error!=EINTR)) {
-            transfer_fault(part,n==0?"peer closed":"socket failure",error,done); return false;
-        }
-        else { discovery_poll(); vTaskDelay(1); }
+    sonar_socket_status_t status=sonar_socket_transfer(fd,data,length,send_data,began,
+        SONAR_NET_DEADLINE_MS,discovery_poll,&done);
+    if (status!=SONAR_SOCKET_DONE) {
+        transfer_fault(part,reason[status],status==SONAR_SOCKET_FAILED?errno:0,done);
     }
-    return true;
+    return status==SONAR_SOCKET_DONE;
 }
 static bool send_record(int fd, int slot, uint64_t batch_us)
 {
@@ -140,7 +120,7 @@ static void serve(int fd)
 {
     uint8_t hello[8],reply[8]={'R','E','A','D','Y','2','\r','\n'};
     TickType_t began=xTaskGetTickCount();
-    if (!nonblocking(fd) || !transfer(fd,hello,8,false,began,"hello") || memcmp(hello,"SONAR2\r\n",8)!=0 ||
+    if (!sonar_socket_nonblocking(fd) || !transfer(fd,hello,8,false,began,"hello") || memcmp(hello,"SONAR2\r\n",8)!=0 ||
         !transfer(fd,reply,8,true,began,"ready")) { return; }
     connection(true); note("receiver connected; data batches every 30 seconds, ACK required before buffer reuse.");
     TickType_t wake=xTaskGetTickCount();
@@ -152,7 +132,7 @@ static void serve(int fd)
             uint8_t unexpected;
             int n=lwip_recv(fd,&unexpected,1,MSG_PEEK);
             int error=n<0?errno:0;
-            if (n>=0 || (error!=EWOULDBLOCK && error!=EAGAIN && error!=EINTR)) {
+            if (n>=0 || !sonar_socket_would_block(error)) {
                 note("receiver closed or sent unexpected data between batches."); return;
             }
             vTaskDelay(pdMS_TO_TICKS(50));
@@ -200,15 +180,8 @@ void sonar_network_task(void *unused)
     }
     if (!sonar_tcp_console_start()) { note("TCP console creation failed; inspect UART diagnostics."); }
     if (!sonar_control_server_start()) { note("control-server task creation failed; scan configuration unavailable."); }
-    int listener=lwip_socket(AF_INET,SOCK_STREAM,0);
-    struct sockaddr_in address;
-    memset(&address,0,sizeof(address)); address.sin_family=AF_INET;
-    address.sin_port=htons(SONAR_NET_PORT); address.sin_addr.s_addr=INADDR_ANY;
-    if (listener<0 || !nonblocking(listener) || lwip_bind(listener,(struct sockaddr *)&address,sizeof(address))<0 ||
-        lwip_listen(listener,1)<0) {
-        if (listener>=0) { lwip_close(listener); }
-        note("server setup failed."); vTaskDelete(NULL); return;
-    }
+    int listener=sonar_socket_open(SOCK_STREAM,SONAR_NET_PORT);
+    if (listener<0) { note("server setup failed."); vTaskDelete(NULL); return; }
     note("listening on " SONAR_NET_IP ":5001; subnet mask " SONAR_NET_MASK ".");
     discovery_start();
     for (;;) {

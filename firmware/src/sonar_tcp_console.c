@@ -2,6 +2,7 @@
 #include "sonar_console_buffer.h"
 #include "sonar_stage2.h"
 #include "sonar_console.h"
+#include "sonar_socket.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "lwip/sockets.h"
@@ -63,26 +64,12 @@ static size_t read_history(uint64_t *cursor, uint64_t through, uint8_t *out, uin
     unlock_history(saved);
     return count;
 }
-static bool nonblocking(int fd)
-{ unsigned long enabled = 1U; return lwip_ioctl(fd, FIONBIO, &enabled) == 0; }
-static bool again(int error)
-{ return error == EAGAIN || error == EWOULDBLOCK || error == EINTR; }
 static bool expired(TickType_t began, uint32_t milliseconds)
 { return (TickType_t)(xTaskGetTickCount() - began) >= pdMS_TO_TICKS(milliseconds); }
-static bool handshake_io(int fd, uint8_t *p, size_t count, bool sending)
+static bool handshake_io(int fd, uint8_t *p, uint32_t count, bool sending)
 {
-    TickType_t began = xTaskGetTickCount();
-    size_t done = 0U;
-    while (done < count) {
-        int n = sending ? lwip_send(fd, p + done, count - done, 0) :
-                          lwip_recv(fd, p + done, count - done, 0);
-        int error = n < 0 ? errno : 0;
-        if (n > 0) { done += (size_t)n; }
-        else if (n == 0 || !again(error)) { return false; }
-        if (expired(began, CONSOLE_HELLO_MS)) { return false; }
-        if (n < 0) { vTaskDelay(1U); }
-    }
-    return true;
+    return sonar_socket_transfer(fd, p, count, sending, xTaskGetTickCount(), CONSOLE_HELLO_MS,
+                                 NULL, NULL) == SONAR_SOCKET_DONE;
 }
 static void note(const char *text)
 { sonar_console_lock(); xil_printf("CONSOLE: %s\r\n", text); sonar_console_unlock(); }
@@ -91,7 +78,7 @@ static void serve(int fd)
 {
     uint8_t hello[11];
     uint8_t reply[] = "CONSOLE1\r\n";
-    if (!nonblocking(fd) || !handshake_io(fd, hello, sizeof(hello), false) ||
+    if (!sonar_socket_nonblocking(fd) || !handshake_io(fd, hello, sizeof(hello), false) ||
         memcmp(hello, "SONARCON1\r\n", sizeof(hello)) != 0 ||
         !handshake_io(fd, reply, sizeof(reply) - 1U, true)) { return; }
 
@@ -105,7 +92,7 @@ static void serve(int fd)
         uint8_t input[64];
         int n = lwip_recv(fd, input, sizeof(input), 0);
         int error = n < 0 ? errno : 0;
-        if (n == 0 || (n < 0 && !again(error))) { break; }
+        if (n == 0 || (n < 0 && !sonar_socket_would_block(error))) { break; }
         if (n > 0) {
             last_rx = xTaskGetTickCount();
             bool stop = memchr(input, 'x', (size_t)n) != NULL || memchr(input, 'X', (size_t)n) != NULL;
@@ -137,7 +124,7 @@ static void serve(int fd)
         n = lwip_send(fd, packet + sent, size - sent, 0);
         error = n < 0 ? errno : 0;
         if (n > 0) { sent += (size_t)n; }
-        else if (n == 0 || !again(error)) { break; }
+        else if (n == 0 || !sonar_socket_would_block(error)) { break; }
         if (expired(write_began, CONSOLE_WRITE_MS)) { break; }
         vTaskDelay(1U);
     }
@@ -150,18 +137,8 @@ disconnected:
 static void server(void *unused)
 {
     (void)unused;
-    int listener = lwip_socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in address;
-    memset(&address, 0, sizeof(address));
-    address.sin_family = AF_INET;
-    address.sin_port = htons(SONAR_CONSOLE_PORT);
-    address.sin_addr.s_addr = INADDR_ANY;
-    if (listener < 0 || !nonblocking(listener) ||
-        lwip_bind(listener, (struct sockaddr *)&address, sizeof(address)) < 0 ||
-        lwip_listen(listener, 1) < 0) {
-        if (listener >= 0) { lwip_close(listener); }
-        note("TCP 5004 bind failed."); vTaskDelete(NULL); return;
-    }
+    int listener = sonar_socket_open(SOCK_STREAM, SONAR_CONSOLE_PORT);
+    if (listener < 0) { note("TCP 5004 bind failed."); vTaskDelete(NULL); return; }
     note("TCP 5004 ready; GENERATE controls and status now use Ethernet.");
     for (;;) {
         int fd = lwip_accept(listener, NULL, NULL);

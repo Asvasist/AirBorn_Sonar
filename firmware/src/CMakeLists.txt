@@ -35,7 +35,7 @@ set(_sources main.c sonar_config.c sonar_health.c sonar_profile.c sonar_platform
     sonar_speaker.c sonar_speaker_board.c sonar_codec_bus.c sonar_pl_gpio.c
     sonar_chirp.c sonar_waveform.c sonar_tx_bram.c sonar_wav_player.c
     sonar_experiment_config.c sonar_experiment.c
-    sonar_control_protocol.c sonar_control_server.c)
+    sonar_control_protocol.c sonar_control_server.c sonar_socket.c)
 # Use the application's existing memory layout; generated templates are optional.
 if(NOT USER_LINKER_SCRIPT)
     set(USER_LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/lscript.ld")

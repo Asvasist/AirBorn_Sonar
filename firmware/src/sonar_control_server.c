@@ -3,12 +3,11 @@
 #include "sonar_experiment.h"
 #include "sonar_frames.h"
 #include "sonar_console.h"
+#include "sonar_socket.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "lwip/sockets.h"
-#include "lwip/inet.h"
-#include "lwip/errno.h"
 #include "xil_printf.h"
 #include <string.h>
 
@@ -56,18 +55,8 @@ static bool rpc(request_t *q, response_t *r)
 }
 static bool io(int fd, uint8_t *data, uint32_t count, bool sending)
 {
-    TickType_t start=xTaskGetTickCount(); uint32_t done=0;
-    while (done<count) {
-        int n=sending?lwip_send(fd,data+done,count-done,0):lwip_recv(fd,data+done,count-done,0);
-        if (n>0) { done+=(uint32_t)n; }
-        else if (n==0 || (errno!=EWOULDBLOCK && errno!=EAGAIN && errno!=EINTR)) { return false; }
-        if ((TickType_t)(xTaskGetTickCount()-start)>=pdMS_TO_TICKS(SOCKET_MS)) { return false; }
-        if (n<0) { vTaskDelay(1); }
-    }
-    return true;
+    return sonar_socket_transfer(fd,data,count,sending,xTaskGetTickCount(),SOCKET_MS,NULL,NULL)==SONAR_SOCKET_DONE;
 }
-static bool nonblocking(int fd)
-{ int flags=lwip_fcntl(fd,F_GETFL,0); return flags>=0 && lwip_fcntl(fd,F_SETFL,flags|O_NONBLOCK)>=0; }
 static bool respond(int fd, uint32_t op, uint32_t id, const response_t *r)
 {
     uint8_t payload[SONAR_CONTROL_REPLY_BYTES],header[SONAR_CONTROL_HEADER];
@@ -79,7 +68,7 @@ static void serve(int fd, uint32_t session)
 {
     request_t q={.session=session}; response_t r;
     uint32_t last=0,token=0;
-    if (!nonblocking(fd)) { return; }
+    if (!sonar_socket_nonblocking(fd)) { return; }
     for (;;) {
         uint8_t header[SONAR_CONTROL_HEADER]; uint32_t op,id,bytes,crc;
         if (!io(fd,header,sizeof(header),false) || !sonar_control_decode(header,&op,&id,&bytes,&crc)) { break; }
@@ -103,13 +92,8 @@ static void serve(int fd, uint32_t session)
 static void server(void *unused)
 {
     (void)unused;
-    int listener=lwip_socket(AF_INET,SOCK_STREAM,0);
-    struct sockaddr_in address;
-    memset(&address,0,sizeof(address)); address.sin_family=AF_INET;
-    address.sin_port=htons(SONAR_CONTROL_PORT); address.sin_addr.s_addr=INADDR_ANY;
-    if (listener<0 || !nonblocking(listener) ||
-        lwip_bind(listener,(struct sockaddr *)&address,sizeof(address))<0 || lwip_listen(listener,1)<0) {
-        if (listener>=0) { lwip_close(listener); }
+    int listener=sonar_socket_open(SOCK_STREAM,SONAR_CONTROL_PORT);
+    if (listener<0) {
         sonar_console_lock(); xil_printf("CTRL server failed to bind port 5003.\r\n"); sonar_console_unlock();
         vTaskDelete(NULL); return;
     }
