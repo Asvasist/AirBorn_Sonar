@@ -7,8 +7,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "host"))
 from sonar_gui_control import ExperimentControl, parse_steps
 
 
-def status(state="IDLE", steps=20, receiver=1, used=0):
-    return f"STAGE2 {state} cycle=3 steps={steps} divisor=1 receiver={receiver} motor_pos=60 DDR={used}/32"
+APPLIED = dict(config_id=1, mode=0, duration_us=35000, amplitude_pct=40, waveform_id=0)
+
+
+def status(state="IDLE", steps=20, receiver=1, used=0, config=1):
+    ready = int(state in {"IDLE", "STOPPED"})
+    return (f"STAGE2 {state} cycle=3 steps={steps} divisor=1 receiver={receiver} motor_pos=60 DDR={used}/32"
+            f" config={config} mode=GENERATE tx_us=35000 amplitude=40 waveform=0 audio_ready={ready}")
 
 
 class GuiControlTests(unittest.TestCase):
@@ -16,14 +21,15 @@ class GuiControlTests(unittest.TestCase):
         self.now = 10.0
         self.sent, self.log = [], []
         self.c = ExperimentControl(self.sent.append, self.log.append, lambda: self.now)
-        self.c.serial_connection(True)
+        self.c.console_connection(True)
         self.c.ethernet_connection(True)
+        self.c.audio_configuration(APPLIED)
         self.c.line(status())
 
     def enter_value(self, steps="45", reverse=False):
         self.c.start(steps, reverse)
-        self.c.line("Enter signed microstep count, then Enter:")
-        self.c.line("Step count stored for every cycle. Press R once to repeat; X stops.")
+        self.c.line("Enter signed positions per 360 degrees (1..800), then Enter:")
+        self.c.line("Positions-per-revolution stored. Press R for one complete 360-degree scan; X stops.")
 
     def test_start_requires_network_and_fresh_idle_and_board_receiver(self):
         self.assertTrue(self.c.can_start)
@@ -58,7 +64,9 @@ class GuiControlTests(unittest.TestCase):
         for value in ("0", "100001", "-20", "1.5", "NaN", "20\rr", "", "999999999"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_steps(value)
-        self.assertEqual(parse_steps(" 100000 "), 100000)
+        self.assertEqual(parse_steps(" 800 "), 800)
+        with self.assertRaises(ValueError):
+            parse_steps("801")
 
     def test_mismatch_or_receiver_lost_never_starts(self):
         self.enter_value()
@@ -69,8 +77,8 @@ class GuiControlTests(unittest.TestCase):
     def test_stop_cancels_pending_prompt_and_late_confirmation(self):
         self.c.start("45")
         self.c.stop()
-        self.c.line("Enter signed microstep count, then Enter:")
-        self.c.line("Step count stored for every cycle.")
+        self.c.line("Enter signed positions per 360 degrees (1..800), then Enter:")
+        self.c.line("Positions-per-revolution stored.")
         self.c.line(status(steps=45))
         self.assertNotIn(b"r", self.sent)
         self.assertNotIn(b"45\r", self.sent)
@@ -81,6 +89,8 @@ class GuiControlTests(unittest.TestCase):
         self.assertEqual(self.sent[-1], b"x")
         self.c.line(status("STOPPED"))
         self.c.ethernet_connection(True)
+        self.c.audio_configuration(APPLIED)
+        self.c.line(status("STOPPED"))
         self.enter_value()
         self.c.line(status(steps=45))
         self.c.line(status("WAIT_BUFFER", steps=45, used=32))
@@ -117,11 +127,31 @@ class GuiControlTests(unittest.TestCase):
         self.assertIn("HEALTH FAULT", self.c.error)
 
     def test_disconnect_invalidates_state_and_stop_cannot_be_claimed(self):
-        self.c.serial_connection(False)
+        self.c.console_connection(False)
         self.assertFalse(self.c.can_start)
         self.assertFalse(self.c.drained)
         with self.assertRaises(ValueError):
             self.c.stop()
+
+    def test_missing_audio_or_old_firmware_never_starts(self):
+        self.c.audio_configuration(None)
+        self.assertTrue(self.c.can_configure)
+        self.assertFalse(self.c.can_start)
+        self.c.audio_configuration(APPLIED)
+        self.c.line(status().split(" config=")[0])
+        self.assertFalse(self.c.can_start)
+
+    def test_changed_audio_during_handshake_cancels_start(self):
+        self.enter_value()
+        self.c.line(status(steps=45, config=2))
+        self.assertNotIn(b"r", self.sent)
+        self.assertEqual(self.sent[-1], b"x")
+
+    def test_reset_discards_applied_configuration(self):
+        self.c.line("INIT: cycle=PASS")
+        self.c.line(status())
+        self.assertIsNone(self.c.applied_audio)
+        self.assertFalse(self.c.can_start)
 
 
 if __name__ == "__main__":

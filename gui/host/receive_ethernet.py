@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Receive Stage 2 raw PDM frames over TCP; acknowledge only persisted records."""
+"""Receive sonar WAV or raw PDM frames over TCP; acknowledge only persisted records."""
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +43,9 @@ def decode_header(raw):
         raise ValueError("Unsupported frame dimensions")
     if bool(meta["payload_bytes"]) != bool(meta["sequence"]):
         raise ValueError("Invalid heartbeat/frame sequence")
+    meta["config_id"] = (meta["flags"] >> 16) & 0xffff
+    meta["tx_mode"] = ("WAV" if meta["flags"] & 0x200 else "GENERATE") if meta["config_id"] else "UNKNOWN"
+    meta["tx_duration_us"] = meta["tx_nominal_us"]
     return meta
 
 
@@ -77,7 +80,7 @@ def run_receiver(args, folder):
                     "connected_utc": utc_now(), "board": board, "port": args.port, "local_ip": local_ip,
                 })
                 print("Connected. Data arrives in 30-second batches; keep this window open. "
-                      "On UART: N, steps, Enter, then R once; X stops cycles. Python does not start capture.")
+                      "Use the GUI or TCP 5004 console to start a scan; this receiver never starts capture.")
                 phase = "record reception"
                 last, saved = 0, 0
                 while True:
@@ -92,7 +95,7 @@ def run_receiver(args, folder):
                     else:
                         second = meta["trigger_request_us"] // 1_000_000
                         print(f"Batch at board second {second}; {saved} frame deliveries saved so far. "
-                              "Queued recordings follow this marker. No .bin is created for a status marker.")
+                              "Queued recordings follow this marker. No audio file is created for a status marker.")
         except (OSError, EOFError, ValueError) as error:
             print(f"Interrupted during {phase}: {error}")
             hint = permission_help(error)

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "host"))
-from sonar_gui_transport import EthernetWorker, LineDecoder, SerialWorker
+from sonar_gui_transport import EthernetWorker
 from test_ethernet import Fragmented, record
 
 
@@ -31,60 +31,6 @@ class FastEvent(threading.Event):
 class GuiTransportTests(unittest.TestCase):
     def args(self, output):
         return SimpleNamespace(output=output, board=None, port=5001, interface="Ethernet", local_ip=None)
-
-    def test_line_fragmentation_and_memory_bound(self):
-        parser = LineDecoder()
-        self.assertEqual(parser.feed(b"Enter signed microstep"), [])
-        self.assertEqual(parser.feed(b" count, then Enter:\r\nOK\npartial"),
-                         ["Enter signed microstep count, then Enter:", "OK"])
-        self.assertEqual(parser.feed(b" end\n"), ["partial end"])
-        with self.assertRaises(ValueError):
-            parser.feed(b"a" * 8193)
-
-    def test_serial_stop_discards_pending_start(self):
-        writes, events = [], []
-        worker = None
-
-        class Port:
-            in_waiting = 0
-            def __init__(self, **kwargs):
-                self.config = kwargs
-                self.closed = False
-            def open(self):
-                self_open.assertFalse(self.dtr)
-                self_open.assertFalse(self.rts)
-                self_open.assertEqual(self.config["baudrate"], 115200)
-            def write(self, value):
-                writes.append(value)
-                return len(value)
-            def read(self, size):
-                worker.stop()
-                return b"STAGE2 STOPPED\r\n"
-            def close(self):
-                self.closed = True
-
-        self_open = self
-        port = Port(port=None, baudrate=115200)
-        worker = SerialWorker("COM_TEST", lambda *e: events.append(e), lambda **k: port)
-        worker.send(b"n")
-        worker.send(b"20\r")
-        worker.send(b"r")
-        worker.send(b"x")
-        worker.run()
-        self.assertEqual(writes, [b"x"])
-        self.assertTrue(port.closed)
-        self.assertIn(("line", "STAGE2 STOPPED"), events)
-        self.assertEqual(events[-1], ("serial", False))
-        with self.assertRaises(OSError):
-            worker.send(b"r")
-
-    def test_serial_open_error_is_reported(self):
-        events = []
-        def fail(**kwargs):
-            raise PermissionError("COM port already open in Vitis")
-        SerialWorker("COM_TEST", lambda *e: events.append(e), fail).run()
-        self.assertIn("already open", events[0][1])
-        self.assertEqual(events[-1], ("serial", False))
 
     def test_receiver_reconnects_and_persists_before_event(self):
         with tempfile.TemporaryDirectory() as folder:
