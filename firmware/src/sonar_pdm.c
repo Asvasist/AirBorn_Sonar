@@ -16,6 +16,7 @@
  * redesign these coefficients and potentially the PCM sample rate.
  */
 #define FIR_HALF 400U
+#define FIR_TAPS (2U * FIR_HALF + 1U)
 
 static const int32_t fir_q31[FIR_HALF + 1U] = {
     INT32_C(21471070), INT32_C(21467111), INT32_C(21455215), INT32_C(21435399), INT32_C(21407677), INT32_C(21372070),
@@ -87,21 +88,50 @@ static const int32_t fir_q31[FIR_HALF + 1U] = {
     INT32_C(-1615), INT32_C(-1145), INT32_C(-720), INT32_C(-339), INT32_C(0)
 };
 
-static int pdm_pm1(const uint32_t *words,
-                   uint32_t pdm_samples,
-                   int32_t sample_index,
-                   unsigned channel)
+/* The output sample at PDM index c is sum(h[t] * s[c - FIR_HALF + t]) over the
+ * FIR_TAPS taps, with s = +1/-1. Because s is one bit, eight consecutive taps
+ * collapse into one table entry indexed by eight PDM bits: 101 lookups per
+ * output sample instead of 801 multiply-accumulates. The sum is unchanged, so
+ * the result is bit-identical to sonar_pdm_reference_sample(). */
+#define LUT_GROUPS ((FIR_TAPS + 7U) / 8U)
+#define CHANNEL_WORDS ((SONAR_PDM_SAMPLES / 32U) + 2U) /* +2: zero padding read by window() */
+
+static int32_t lut[LUT_GROUPS][256];
+static bool lut_ready;
+static uint32_t channel_bits[CHANNEL_WORDS];
+
+static int32_t tap(uint32_t t)
 {
-    if (sample_index < 0 || (uint32_t)sample_index >= pdm_samples) {
-        return 0; /* zero padding for delay-compensated frame edges */
+    if (t >= FIR_TAPS) { return 0; }
+    return fir_q31[t > FIR_HALF ? t - FIR_HALF : FIR_HALF - t];
+}
+
+static void build_lut(void)
+{
+    for (uint32_t group = 0U; group < LUT_GROUPS; ++group) {
+        for (uint32_t bits = 0U; bits < 256U; ++bits) {
+            int32_t sum = 0;
+            for (uint32_t k = 0U; k < 8U; ++k) {
+                int32_t h = tap(group * 8U + k);
+                sum += ((bits >> k) & 1U) != 0U ? h : -h;
+            }
+            lut[group][bits] = sum;
+        }
     }
+    lut_ready = true;
+}
 
-    const uint32_t word = words[(uint32_t)sample_index >> 1U];
-    const uint16_t instant = ((sample_index & 1) != 0)
-                           ? (uint16_t)(word >> 16U)
-                           : (uint16_t)(word & UINT32_C(0xffff));
+static uint32_t instant(const uint32_t *words, uint32_t index)
+{
+    uint32_t word = words[index >> 1U];
+    return (index & 1U) != 0U ? word >> 16U : word & UINT32_C(0xffff);
+}
 
-    return ((instant >> channel) & 1U) != 0U ? 1 : -1;
+/* Eight PDM bits of the current channel starting at bit position p. */
+static uint32_t window(uint32_t p)
+{
+    uint64_t pair = ((uint64_t)channel_bits[(p >> 5U) + 1U] << 32U) | channel_bits[p >> 5U];
+    return (uint32_t)(pair >> (p & 31U)) & 0xffU;
 }
 
 static int16_t q31_to_i16(int64_t value)
@@ -123,63 +153,65 @@ static int16_t q31_to_i16(int64_t value)
     return (int16_t)scaled;
 }
 
+int16_t sonar_pdm_reference_sample(const uint32_t *words, uint32_t pdm_samples,
+                                   uint32_t frame, unsigned channel)
+{
+    int64_t center = (int64_t)frame * SONAR_PDM_DECIMATION;
+    int64_t acc = 0;
+
+    for (uint32_t t = 0U; t < FIR_TAPS; ++t) {
+        int64_t index = center - (int64_t)FIR_HALF + (int64_t)t;
+        if (index >= 0 && index < (int64_t)pdm_samples) {
+            /* Samples outside the capture are zero padding. */
+            int32_t h = tap(t);
+            acc += ((instant(words, (uint32_t)index) >> channel) & 1U) != 0U ? h : -h;
+        }
+    }
+    return q31_to_i16(acc);
+}
+
 bool sonar_pdm_to_pcm16_interleaved(const uint8_t *pdm,
                                     uint32_t pdm_bytes,
                                     int16_t *pcm,
                                     uint32_t pcm_sample_capacity,
                                     uint32_t *pcm_frames_out)
 {
-    if (pdm == NULL || pcm == NULL || pcm_frames_out == NULL) {
-        return false;
-    }
-    if ((((uintptr_t)pdm) & (sizeof(uint32_t) - 1U)) != 0U) {
-        return false;
-    }
-    if ((pdm_bytes & 3U) != 0U) {
+    if (pdm == NULL || pcm == NULL || pcm_frames_out == NULL ||
+        (((uintptr_t)pdm) & (sizeof(uint32_t) - 1U)) != 0U || (pdm_bytes & 3U) != 0U) {
         return false;
     }
 
-    const uint32_t words_count = pdm_bytes / 4U;
-    const uint32_t pdm_samples = words_count * 2U;
-
-    if ((pdm_samples % SONAR_PDM_DECIMATION) != 0U) {
-        return false;
-    }
-
+    const uint32_t pdm_samples = (pdm_bytes / 4U) * 2U;
     const uint32_t pcm_frames = pdm_samples / SONAR_PDM_DECIMATION;
-    const uint32_t required_samples = pcm_frames * SONAR_STAGE2_CHANNELS;
 
-    if (pcm_sample_capacity < required_samples) {
+    if (pdm_samples > SONAR_PDM_SAMPLES || (pdm_samples % SONAR_PDM_DECIMATION) != 0U ||
+        pcm_sample_capacity < pcm_frames * SONAR_STAGE2_CHANNELS) {
         return false;
     }
+    if (!lut_ready) { build_lut(); }
 
     const uint32_t *words = (const uint32_t *)(const void *)pdm;
 
-    for (uint32_t frame = 0U; frame < pcm_frames; ++frame) {
-        const int32_t center =
-            (int32_t)(frame * (uint32_t)SONAR_PDM_DECIMATION);
-
-        for (unsigned channel = 0U;
-             channel < SONAR_STAGE2_CHANNELS;
-             ++channel) {
-            int64_t acc =
-                (int64_t)fir_q31[0] *
-                (int64_t)pdm_pm1(words, pdm_samples, center, channel);
-
-            for (uint32_t distance = 1U;
-                 distance <= FIR_HALF;
-                 ++distance) {
-                const int pair =
-                    pdm_pm1(words, pdm_samples,
-                            center - (int32_t)distance, channel) +
-                    pdm_pm1(words, pdm_samples,
-                            center + (int32_t)distance, channel);
-
-                acc += (int64_t)fir_q31[distance] * (int64_t)pair;
+    for (unsigned channel = 0U; channel < SONAR_STAGE2_CHANNELS; ++channel) {
+        /* Transpose this channel into a contiguous bit stream. */
+        for (uint32_t i = 0U; i < CHANNEL_WORDS; ++i) { channel_bits[i] = 0U; }
+        for (uint32_t i = 0U; i < pdm_samples; ++i) {
+            channel_bits[i >> 5U] |= ((instant(words, i) >> channel) & 1U) << (i & 31U);
+        }
+        for (uint32_t frame = 0U; frame < pcm_frames; ++frame) {
+            uint32_t center = frame * SONAR_PDM_DECIMATION;
+            int16_t sample;
+            if (center < FIR_HALF || center + FIR_HALF >= pdm_samples) {
+                sample = sonar_pdm_reference_sample(words, pdm_samples, frame, channel);
+            } else {
+                uint32_t start = center - FIR_HALF;
+                int64_t acc = 0;
+                for (uint32_t group = 0U; group < LUT_GROUPS; ++group) {
+                    acc += lut[group][window(start + group * 8U)];
+                }
+                sample = q31_to_i16(acc);
             }
-
-            pcm[frame * SONAR_STAGE2_CHANNELS + channel] =
-                q31_to_i16(acc);
+            pcm[frame * SONAR_STAGE2_CHANNELS + channel] = sample;
         }
     }
 
