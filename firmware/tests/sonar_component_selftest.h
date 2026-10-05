@@ -4,4 +4,5 @@
 sonar_test_result_t sonar_speaker_selftest_run(sonar_test_report_fn report);
 sonar_test_result_t sonar_codec_selftest_run(sonar_test_report_fn report);
 sonar_test_result_t sonar_pdm_selftest_run(sonar_test_report_fn report);
+sonar_test_result_t sonar_logic_selftest_run(sonar_test_report_fn report);
 #endif
