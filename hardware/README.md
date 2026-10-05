@@ -27,6 +27,12 @@ The script fails if implementation does not complete or setup timing is
 violated. Output: `hardware/vivado/airborne_sonar.xsa`. To open the design in
 the GUI instead, source `scripts/create_project.tcl` from the Tcl console.
 
+On Windows, clone to a short path (for example `D:\src\sonar`): ILA debug-core
+generation fails when Vivado's temporary paths exceed 146 characters.
+
+A clean build from these sources meets timing (WNS +0.444 ns) and reproduces
+the released XSA's module list, address map and PS7 initialization.
+
 ## Data path
 
 ```
