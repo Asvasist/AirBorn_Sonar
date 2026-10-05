@@ -27,6 +27,7 @@
 sonar_frames_t sonar_frames;
 uint8_t sonar_frame_data[SONAR_STAGE2_POOL_COUNT][SONAR_STAGE2_SPAN] __attribute__((aligned(32)));
 static QueueHandle_t keys;
+static TaskHandle_t experiment_handle;
 static bool stop_requested, inhibited, input_overflow;
 static sonar_cycle_t cycle;
 static sonar_stepper_t motor;
@@ -53,6 +54,7 @@ void sonar_stage2_key(uint8_t key)
     else if (keys!=NULL && xQueueSend(keys,&key,0)!=pdPASS) {
         taskENTER_CRITICAL(); input_overflow=true; stop_requested=true; taskEXIT_CRITICAL();
     }
+    if (experiment_handle!=NULL) { xTaskNotifyGive(experiment_handle); }
 }
 static bool stop_outputs(void *context)
 {
@@ -243,6 +245,7 @@ static void experiment_task(void *unused)
     uint32_t last_motor=0;
     for (;;) {
         bool stop, fatal, overflow;
+        sonar_rtos_heartbeat();
         taskENTER_CRITICAL(); stop=stop_requested; stop_requested=false;
         fatal=inhibited; overflow=input_overflow; input_overflow=false; taskEXIT_CRITICAL();
         if (stop) {
@@ -351,13 +354,14 @@ static void experiment_task(void *unused)
             sonar_console_unlock();
             fault_reported=true;
         }
-        vTaskDelay(1);
+        /* Sleep one tick, or less when a key or DMA completion notifies this task. */
+        (void)ulTaskNotifyTake(pdTRUE,1U);
     }
 }
 bool sonar_stage2_create(void)
 {
     if (!sonar_control_create()) { return false; }
     keys=xQueueCreate(64,1);
-    if (keys==NULL || xTaskCreate(experiment_task,"experiment",2048,NULL,3,NULL)!=pdPASS) { return false; }
+    if (keys==NULL || xTaskCreate(experiment_task,"experiment",2048,NULL,3,&experiment_handle)!=pdPASS) { return false; }
     return sys_thread_new("ethernet",sonar_network_task,NULL,2048,2)!=NULL;
 }

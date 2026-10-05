@@ -5,6 +5,9 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
+#include "xparameters.h"
+#include "xscuwdt.h"
+#include "xstatus.h"
 #include "xil_printf.h"
 #include <stddef.h>
 
@@ -27,62 +30,86 @@ _Static_assert(sizeof(TickType_t) == sizeof(uint32_t), "Sonar requires 32-bit ti
 _Static_assert(SONAR_QUEUE_LENGTH > 0U, "Heartbeat queue must not be empty.");
 _Static_assert(SONAR_TASK_STACK_WORDS >= 256U, "Task stack is too small for diagnostics.");
 
+/* The private watchdog counts PERIPHCLK = CPU clock / 2. */
+#define WATCHDOG_LOAD ((uint32_t)(XPAR_CPU_CORE_CLOCK_FREQ_HZ / 2U) * SONAR_WATCHDOG_S)
+_Static_assert((uint64_t)(XPAR_CPU_CORE_CLOCK_FREQ_HZ / 2U) * SONAR_WATCHDOG_S <= UINT32_MAX,
+               "Watchdog timeout exceeds the 32-bit counter.");
+_Static_assert(SONAR_WATCHDOG_S * 1000U > 2U * SONAR_HEARTBEAT_MS,
+               "Watchdog must outlast several supervisor periods.");
+
 static QueueHandle_t heartbeat_queue;
-static TaskHandle_t producer_handle;
 static TaskHandle_t supervisor_handle;
 static sonar_timing_t periods;
+static XScuWdt watchdog;
 /* Access through critical sections; this is a latch, not a dropped-event count. */
 static bool queue_failed;
 static bool creation_attempted;
+/* Owned by the monitored task. */
+static uint32_t sequence;
+static uint32_t last_sent;
 
-#if configSUPPORT_STATIC_ALLOCATION == 1
-static StaticQueue_t queue_storage;
-static uint8_t queue_bytes[SONAR_QUEUE_LENGTH * sizeof(sonar_heartbeat_t)];
-static StaticTask_t producer_storage;
-static StaticTask_t supervisor_storage;
-static StackType_t producer_stack[SONAR_TASK_STACK_WORDS];
-static StackType_t supervisor_stack[SONAR_TASK_STACK_WORDS];
-#elif configSUPPORT_DYNAMIC_ALLOCATION != 1
-#error "Enable static or dynamic allocation in the Vitis FreeRTOS BSP."
-#endif
-
-static void producer_task(void *argument)
+void sonar_rtos_heartbeat(void)
 {
-    TickType_t wake = xTaskGetTickCount();
-    uint32_t sequence = 0U;
-    (void)argument;
-    for (;;) {
-        sonar_heartbeat_t event = {sequence, (uint32_t)xTaskGetTickCount()};
-        if (xQueueSend(heartbeat_queue, &event, 0U) != pdPASS) {
-            taskENTER_CRITICAL();
-            queue_failed = true;
-            taskEXIT_CRITICAL();
-            /* The supervisor owns fault reporting; this task stays blocked. */
-            for (;;) { vTaskDelay((TickType_t)periods.heartbeat); }
-        }
+    uint32_t now = (uint32_t)xTaskGetTickCount();
+    if (sequence != 0U && (uint32_t)(now - last_sent) < periods.heartbeat) { return; }
+    sonar_heartbeat_t event = {sequence, now};
+    if (xQueueSend(heartbeat_queue, &event, 0U) == pdPASS) {
         ++sequence;
-        vTaskDelayUntil(&wake, (TickType_t)periods.heartbeat);
+        last_sent = now;
+    } else {
+        taskENTER_CRITICAL();
+        queue_failed = true;
+        taskEXIT_CRITICAL();
     }
 }
 
+static bool watchdog_start(void)
+{
+    XScuWdt_Config *config = XScuWdt_LookupConfig(XPAR_XSCUWDT_0_BASEADDR);
+    if (config == NULL ||
+        XScuWdt_CfgInitialize(&watchdog, config, config->BaseAddr) != XST_SUCCESS) {
+        return false;
+    }
+    XScuWdt_SetWdMode(&watchdog);
+    XScuWdt_LoadWdt(&watchdog, WATCHDOG_LOAD);
+    XScuWdt_Start(&watchdog);
+    return true;
+}
+
+/*
+ * Two layers of supervision:
+ *  - The experiment task, which owns the motor, speaker and DMA, must send a
+ *    heartbeat at least every `periods.timeout` ticks. A stall latches a
+ *    HEALTH FAULT: new work is inhibited, and the board keeps serving retained
+ *    captures over Ethernet. The outputs are safe without that task: playback
+ *    is a finite one-shot and the Tic stops itself when keep-alives stop
+ *    (SONAR_MOTOR_WATCHDOG_MS).
+ *  - This task restarts the Cortex-A9 private watchdog every period. If the
+ *    scheduler, interrupts or this task stop, the watchdog resets the board
+ *    after SONAR_WATCHDOG_S. sonar_halt() also ends in that reset.
+ */
 static void supervisor_task(void *argument)
 {
     sonar_health_t health;
-    uint32_t now = (uint32_t)xTaskGetTickCount();
-    uint32_t last_report = now;
+    sonar_heartbeat_t event;
     bool announced = false;
+    uint32_t last_report;
     (void)argument;
-    if (!sonar_health_init(&health, now, periods.timeout)) { sonar_halt("health init"); }
+
     sonar_console_lock();
     xil_printf("SCHEDULER started; waiting for heartbeat\r\n");
     sonar_console_unlock();
+    /* Monitoring starts with the first heartbeat, after peripheral initialization. */
+    (void)xQueuePeek(heartbeat_queue, &event, portMAX_DELAY);
+    if (!sonar_health_init(&health, event.tick, periods.timeout)) { sonar_halt("health init"); }
+    if (!watchdog_start()) { sonar_halt("watchdog init"); }
+    last_report = event.tick;
 
     for (;;) {
-        sonar_heartbeat_t event;
         bool overflow;
-        BaseType_t received = xQueueReceive(heartbeat_queue, &event,
-                                            (TickType_t)periods.heartbeat);
-        now = (uint32_t)xTaskGetTickCount();
+        BaseType_t received = xQueueReceive(heartbeat_queue, &event, (TickType_t)periods.heartbeat);
+        uint32_t now = (uint32_t)xTaskGetTickCount();
+        XScuWdt_RestartWdt(&watchdog);
         taskENTER_CRITICAL();
         overflow = queue_failed;
         taskEXIT_CRITICAL();
@@ -95,7 +122,10 @@ static void supervisor_task(void *argument)
             sonar_console_lock();
             xil_printf("HEALTH FAULT %s; reset to restart\r\n", sonar_health_name(health.state));
             sonar_console_unlock();
-            for (;;) { vTaskDelay((TickType_t)periods.report); }
+            for (;;) {
+                vTaskDelay((TickType_t)periods.heartbeat);
+                XScuWdt_RestartWdt(&watchdog);
+            }
         }
         if (health.state == SONAR_RUNNING &&
             (!announced || (uint32_t)(now - last_report) >= periods.report)) {
@@ -103,8 +133,7 @@ static void supervisor_task(void *argument)
             xil_printf("HEALTH RUNNING received=%u tick=%u\r\n",
                        (unsigned int)health.received, (unsigned int)now);
 #if INCLUDE_uxTaskGetStackHighWaterMark == 1
-            xil_printf("STACK free_min_words producer=%u supervisor=%u\r\n",
-                       (unsigned int)uxTaskGetStackHighWaterMark(producer_handle),
+            xil_printf("STACK free_min_words supervisor=%u\r\n",
                        (unsigned int)uxTaskGetStackHighWaterMark(supervisor_handle));
 #endif
             sonar_console_unlock();
@@ -124,23 +153,9 @@ bool sonar_rtos_create(const sonar_timing_t *timing)
     periods = *timing;
     queue_failed = false;
 
-#if configSUPPORT_STATIC_ALLOCATION == 1
-    heartbeat_queue = xQueueCreateStatic(SONAR_QUEUE_LENGTH, sizeof(sonar_heartbeat_t),
-                                        queue_bytes, &queue_storage);
-    if (heartbeat_queue == NULL) { return false; }
-    producer_handle = xTaskCreateStatic(producer_task, "heartbeat", SONAR_TASK_STACK_WORDS,
-        NULL, tskIDLE_PRIORITY + 3U, producer_stack, &producer_storage);
-    if (producer_handle == NULL) { return false; }
-    supervisor_handle = xTaskCreateStatic(supervisor_task, "supervisor", SONAR_TASK_STACK_WORDS,
-        NULL, tskIDLE_PRIORITY + 3U, supervisor_stack, &supervisor_storage);
-    return supervisor_handle != NULL;
-#else
-    /* Allocate once at startup. Neither task allocates memory while running. */
+    /* Allocated once at startup; no task allocates memory while running. */
     heartbeat_queue = xQueueCreate(SONAR_QUEUE_LENGTH, sizeof(sonar_heartbeat_t));
     if (heartbeat_queue == NULL) { return false; }
-    if (xTaskCreate(producer_task, "heartbeat", SONAR_TASK_STACK_WORDS, NULL,
-                    tskIDLE_PRIORITY + 3U, &producer_handle) != pdPASS) { return false; }
     return xTaskCreate(supervisor_task, "supervisor", SONAR_TASK_STACK_WORDS, NULL,
                        tskIDLE_PRIORITY + 3U, &supervisor_handle) == pdPASS;
-#endif
 }

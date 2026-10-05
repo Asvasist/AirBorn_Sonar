@@ -4,10 +4,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* These are software health-check periods, never acoustic timing parameters. */
+/* Supervision periods, never acoustic timing parameters. The experiment task
+ * must poll the Tic within its 1 s command timeout anyway, so a 1 s liveness
+ * timeout adds no new constraint on it. */
 #define SONAR_HEARTBEAT_MS 100U
-#define SONAR_TIMEOUT_MS   500U
+#define SONAR_TIMEOUT_MS   1000U
 #define SONAR_REPORT_MS    1000U
+#define SONAR_WATCHDOG_S   2U
 #define SONAR_TASK_STACK_WORDS 1024U
 #define SONAR_QUEUE_LENGTH 4U
 
