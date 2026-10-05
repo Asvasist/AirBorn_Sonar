@@ -30,9 +30,3 @@ void sonar_console_unlock(void)
 {
     if (xSemaphoreGive(console_mutex) != pdTRUE) { sonar_halt("console mutex release"); }
 }
-
-/* TCP 5004 is the sole normal command source. Keep the startup API so main.c
- * does not need a transport-specific task allocation path. UART output can
- * still be mirrored for diagnosis; UART input is intentionally not consumed. */
-bool sonar_console_input_create(void)
-{ return true; }

@@ -7,7 +7,7 @@
 typedef void (*sonar_test_report_fn)(const char *name, bool passed);
 typedef struct { uint32_t passed; uint32_t failed; } sonar_test_result_t;
 
-/* The same deterministic tests run on the host and before the target scheduler. */
+/* Host unit-test suite interface; see tests/CMakeLists.txt. */
 sonar_test_result_t sonar_selftest_run(sonar_test_report_fn report);
 
 #endif

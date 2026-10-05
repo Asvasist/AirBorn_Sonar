@@ -7,6 +7,4 @@ bool sonar_console_create(void);
 void sonar_console_lock(void);
 void sonar_console_unlock(void);
 
-/* Compatibility startup hook; commands now arrive through TCP 5004. */
-bool sonar_console_input_create(void);
 #endif
