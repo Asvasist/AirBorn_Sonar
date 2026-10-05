@@ -14,3 +14,17 @@ uint32_t sonar_profile_check(const sonar_profile_t *profile)
     if (profile->iic_base != SONAR_EXPECTED_IIC_BASE) { mismatch |= SONAR_PROFILE_IIC; }
     return mismatch;
 }
+
+uint32_t sonar_audio_profile_check(const sonar_audio_profile_t *p)
+{
+    if (p == NULL) { return SONAR_PROFILE_CHIRP_FREQ | SONAR_PROFILE_CHIRP_CONTROL | SONAR_PROFILE_AUDIO_CONTROL; }
+    uint32_t errors=0U;
+    if (p->chirp_freq_base!=0x41220000U) { errors|=SONAR_PROFILE_CHIRP_FREQ; }
+    if (p->chirp_control_base!=0x41210000U) { errors|=SONAR_PROFILE_CHIRP_CONTROL; }
+    if (p->audio_control_base==0U || (p->audio_control_base & 0xfffU)!=0U ||
+        p->audio_control_base==p->chirp_freq_base || p->audio_control_base==p->chirp_control_base ||
+        p->audio_control_base==SONAR_EXPECTED_DMA_BASE || p->audio_control_base==SONAR_EXPECTED_GPIO_BASE ||
+        p->audio_control_base==SONAR_EXPECTED_IIC_BASE) { errors|=SONAR_PROFILE_AUDIO_CONTROL; }
+    /* Optional playback BRAM aperture is validated by its driver. */
+    return errors;
+}

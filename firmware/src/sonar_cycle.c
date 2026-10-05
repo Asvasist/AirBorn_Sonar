@@ -12,7 +12,7 @@ bool sonar_cycle_init(sonar_cycle_t *c, const sonar_cycle_config_t *cfg, const s
 {
     if (c == NULL || cfg == NULL || io == NULL || io->capture == NULL ||
         io->move == NULL || io->stop == NULL || cfg->capture_timeout_us == 0U ||
-        cfg->motion_timeout_us == 0U || cfg->motor_start_us < cfg->tx_guard_us) { return false; }
+        cfg->motion_timeout_us == 0U || cfg->tx_timeout_us == 0U || cfg->motor_start_us < cfg->tx_timeout_us) { return false; }
     *c = (sonar_cycle_t){.config = *cfg, .io = *io, .state = CYCLE_IDLE};
     return true;
 }
@@ -21,7 +21,7 @@ bool sonar_cycle_start(sonar_cycle_t *c, int32_t steps, uint64_t now)
     if (c == NULL || steps == 0 || (c->state != CYCLE_IDLE && c->state != CYCLE_STOPPED)) {
         return false;
     }
-    c->steps = steps; c->stopping = false; c->received = false;
+    c->steps = steps; c->stopping = false; c->received = false; c->transmitted = false;
     c->state = CYCLE_WAIT_BUFFER; c->since = now; c->last_poll = now;
     return true;
 }
@@ -33,14 +33,14 @@ bool sonar_cycle_stop(sonar_cycle_t *c, uint64_t now)
         c->state = CYCLE_FAULT; return false;
     }
     c->stopping = true;
-    /* The current PL cannot abort an in-flight capture. Drain it without
-     * issuing a movement, then wait out the transmitter before restart. */
+    /* The receiver cannot abort an in-flight capture. Drain it without
+     * issuing a movement; io.stop has already acknowledged TX abort. */
     if (c->state != CYCLE_ACQUIRE && c->state != CYCLE_FAULT) {
         c->state = CYCLE_STOPPED; c->since = now;
     }
     return true;
 }
-void sonar_cycle_poll(sonar_cycle_t *c, uint64_t now, bool captured, bool motor_done, bool fault)
+void sonar_cycle_poll(sonar_cycle_t *c, uint64_t now, bool captured, bool transmitted, bool motor_done, bool fault)
 {
     if (c == NULL || c->state == CYCLE_FAULT) { return; }
     if (now < c->last_poll) { fail(c,"CLOCK_BACKWARDS"); return; }
@@ -54,14 +54,16 @@ void sonar_cycle_poll(sonar_cycle_t *c, uint64_t now, bool captured, bool motor_
         if (result < 0) { fail(c,"CAPTURE_START"); }
         else if (result > 0) {
             ++c->cycle; c->trigger = trigger; c->since = trigger;
-            c->received = false; c->state = CYCLE_ACQUIRE;
+            c->received = false; c->transmitted = false; c->state = CYCLE_ACQUIRE;
         }
         break;
     }
     case CYCLE_ACQUIRE:
         if (captured) { c->received = true; }
+        if (transmitted) { c->transmitted = true; }
         if (!c->received && now - c->trigger >= c->config.capture_timeout_us) { fail(c,"CAPTURE_TIMEOUT"); break; }
-        if (c->received && now - c->trigger >= c->config.tx_guard_us) {
+        if (!c->transmitted && now - c->trigger >= c->config.tx_timeout_us) { fail(c,"TX_TIMEOUT"); break; }
+        if (c->received && c->transmitted) {
             c->state = c->stopping ? CYCLE_STOPPED : CYCLE_PRE_MOVE;
             c->since = now;
         }

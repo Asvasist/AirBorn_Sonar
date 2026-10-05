@@ -9,6 +9,9 @@ typedef struct {
     int32_t steps;
     int64_t position;
     uint64_t trigger_us, completion_us;
+    uint32_t tx_duration_us;
+    uint32_t config_id, tx_mode, tx_start_hz, tx_stop_hz, tx_amplitude_pct;
+    uint32_t tx_samples, waveform_id, waveform_crc, tx_sample_hz;
 } sonar_frame_meta_t;
 typedef enum { FRAME_FREE, FRAME_FILLING, FRAME_READY, FRAME_SENDING } sonar_frame_state_t;
 typedef struct { sonar_frame_state_t state; sonar_frame_meta_t meta; } sonar_frame_slot_t;

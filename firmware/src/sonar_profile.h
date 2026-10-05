@@ -23,4 +23,11 @@ typedef struct {
 /* Return a bitmask of missing or different BSP declarations. No peripheral I/O. */
 uint32_t sonar_profile_check(const sonar_profile_t *profile);
 
+#define SONAR_PROFILE_CHIRP_FREQ 8U
+#define SONAR_PROFILE_CHIRP_CONTROL 16U
+#define SONAR_PROFILE_AUDIO_CONTROL 32U
+typedef struct {
+    uint32_t chirp_freq_base, chirp_control_base, audio_control_base, tx_bram_base;
+} sonar_audio_profile_t;
+uint32_t sonar_audio_profile_check(const sonar_audio_profile_t *profile);
 #endif

@@ -21,3 +21,10 @@ sonar_profile_t sonar_platform_profile(void)
 #endif
     return profile;
 }
+
+#include "sonar_audio_hw.h"
+sonar_audio_profile_t sonar_platform_audio_profile(void)
+{
+    return (sonar_audio_profile_t){SONAR_CHIRP_FREQ_BASEADDR, SONAR_CHIRP_CONTROL_BASEADDR,
+        SONAR_AUDIO_CONTROL_BASEADDR, SONAR_TX_BRAM_BASEADDR};
+}

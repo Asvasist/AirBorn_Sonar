@@ -34,7 +34,10 @@ set(_sources sonar_number.c sonar_cycle.c sonar_frames.c sonar_stepper.c sonar_s
     sonar_ps_i2c.c sonar_tic.c sonar_driver_selftest.c sonar_motor_zynq.c
     sonar_codec_bus.c sonar_codec_selftest.c sonar_speaker_board.c sonar_pl_gpio.c
     sonar_scan_config.c sonar_scan.c sonar_scan_command.c sonar_scan_selftest.c
-    sonar_scan_sim.c)
+    sonar_scan_sim.c sonar_pdm.c sonar_wav.c sonar_processing.c sonar_scan360.c
+    sonar_experiment_config.c sonar_experiment.c sonar_chirp.c sonar_waveform.c
+    sonar_tx_bram.c sonar_wav_player.c sonar_control_protocol.c sonar_control_server.c
+    sonar_console_buffer.c sonar_tcp_console.c)
 # Use the application's existing memory layout; generated templates are optional.
 if(NOT USER_LINKER_SCRIPT)
     set(USER_LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/lscript.ld")
@@ -52,6 +55,8 @@ set_target_properties(${APP_NAME}.elf PROPERTIES
     C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO
     LINK_DEPENDS "${USER_LINKER_SCRIPT}")
 target_compile_options(${APP_NAME}.elf PRIVATE -Wall -Wextra -Werror)
+# Redirect BSP stdout/stderr into the buffered Ethernet console.
+target_link_options(${APP_NAME}.elf PRIVATE "-Wl,--wrap=outbyte")
 target_compile_definitions(${APP_NAME}.elf PRIVATE ${USER_COMPILE_DEFINITIONS})
 target_include_directories(${APP_NAME}.elf PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}" ${USER_INCLUDE_DIRECTORIES})

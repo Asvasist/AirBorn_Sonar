@@ -4,6 +4,7 @@
 #include "sonar_platform.h"
 #include "sonar_pl_gpio.h"
 #include "sonar_clock.h"
+#include "sonar_chirp.h"
 #include "xaxidma.h"
 #include "xil_cache.h"
 #include "xil_io.h"
@@ -97,6 +98,7 @@ static bool trigger_capture(void *context)
     if (!sonar_pl_gpio_update(SONAR_PL_TRIGGER, SONAR_PL_TRIGGER)) { return false; }
     barrier();
     hardware.trigger_us=sonar_clock_us();
+    sonar_chirp_triggered(hardware.trigger_us);
     /* The exported GPIO starts RX and TX together. This is a request, not a sample clock. */
     vTaskDelay(1U);
     if (!sonar_pl_gpio_update(SONAR_PL_TRIGGER, 0U)) { return false; }

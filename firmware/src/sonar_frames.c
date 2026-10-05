@@ -55,7 +55,7 @@ void sonar_frame_header(uint8_t out[SONAR_WIRE_HEADER], const sonar_frame_meta_t
     put(out+24,SONAR_STAGE2_CHANNELS,4); put(out+28,SONAR_STAGE2_PDM_HZ,4);
     put(out+32,m->trigger_us,8); put(out+40,m->completion_us,8); put(out+48,(uint64_t)m->position,8);
     put(out+56,(uint32_t)m->steps,4); put(out+60,m->divisor,4);
-    put(out+64,SONAR_STAGE2_TX_US,4);
+    put(out+64,m->tx_duration_us,4);
     put(out+68,(uint64_t)SONAR_STAGE2_WORDS*2U*1000000U/SONAR_STAGE2_PDM_HZ,4);
     put(out+72,crc,4); put(out+76,sonar_crc32(out,76),4);
 }

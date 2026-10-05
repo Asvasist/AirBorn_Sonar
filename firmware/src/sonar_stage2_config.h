@@ -1,16 +1,14 @@
 #ifndef SONAR_STAGE2_CONFIG_H
 #define SONAR_STAGE2_CONFIG_H
 
-/* Current platform export: SonarParty.xsa, 2026-09-26. These describe the
- * bitstream, not programmable PL parameters. Re-audit them after an XSA update. */
+/* Receiver is fixed at 50 ms. Runtime TX settings come from TCP 5003. */
+#include "sonar_experiment_config.h"
 #define SONAR_STAGE2_CHANNELS 16U
-#define SONAR_STAGE2_WORDS 3750U /* XSA still short: set 60000 only after a matching FPGA export. */
+#define SONAR_STAGE2_WORDS 60000U
 #define SONAR_STAGE2_PDM_HZ 2400000U
-#define SONAR_STAGE2_TX_US 25000U
 #define SONAR_STAGE2_RX_US ((SONAR_STAGE2_WORDS * 2000000ULL) / SONAR_STAGE2_PDM_HZ)
 #define SONAR_STAGE2_REQUESTED_RX_US 50000U
-/* TX done/overflow/timestamps are not PS-visible in this export. */
-#define SONAR_STAGE2_TX_MARGIN_US 1000U /* Cleanup margin; FPGA still plays only one 25 ms chirp. */
+/* WAV can use mapped completion status; generated-chirp completion is estimated. */
 #define SONAR_STAGE2_MOTOR_START_US 2000000U /* Measured from the shared trigger. */
 #define SONAR_STAGE2_SETTLE_US 2000000U /* Measured from observed motor completion. */
 #define SONAR_STAGE2_CAPTURE_TIMEOUT_US 500000U
@@ -42,7 +40,7 @@ _Static_assert(SONAR_STAGE2_POOL_COUNT > 1ULL +
     (SONAR_STAGE2_BATCH_MS * 1000ULL) /
     (SONAR_STAGE2_MOTOR_START_US + SONAR_STAGE2_SETTLE_US),
     "DDR pool is too small for the configured batch interval and cycle timing");
-_Static_assert(SONAR_STAGE2_MOTOR_START_US >= SONAR_STAGE2_TX_US + SONAR_STAGE2_TX_MARGIN_US &&
+_Static_assert(SONAR_STAGE2_MOTOR_START_US >= SONAR_CAPTURE_US + 10000U &&
     SONAR_STAGE2_MOTOR_START_US >= SONAR_STAGE2_RX_US,
     "Acoustic acquisition must finish before the motor deadline");
 #endif

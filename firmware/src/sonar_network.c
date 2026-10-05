@@ -1,6 +1,9 @@
 #include "sonar_stage2.h"
 #include "sonar_console.h"
+#include "sonar_processing.h"
 #include "sonar_clock.h"
+#include "sonar_control_server.h"
+#include "sonar_tcp_console.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "lwip/init.h"
@@ -96,18 +99,41 @@ static bool send_record(int fd, int slot, uint64_t batch_us)
     /* Empty records mark the start of every batch, including idle seconds. */
     sonar_frame_meta_t meta={.trigger_us=batch_us};
     uint32_t bytes=0,crc=0;
+    uint8_t *payload=NULL;
+
     if (slot>=0) {
-        meta=sonar_frames.slots[slot].meta; bytes=SONAR_STAGE2_BYTES;
-        crc=sonar_crc32(sonar_frame_data[slot],bytes);
+        uint32_t pcm_frames=0;
+        meta=sonar_frames.slots[slot].meta;
+
+        if (!sonar_processing_make_wav(sonar_frame_data[slot],
+                                       SONAR_STAGE2_BYTES,
+                                       &payload,
+                                       &bytes,
+                                       &pcm_frames)) {
+            note("PDM-to-WAV processing failed; frame retained.");
+            return false;
+        }
+
+        meta.flags |= SONAR_FRAME_FLAG_WAV_PCM16;
+        crc=sonar_crc32(payload,bytes);
     }
+
     uint8_t header[SONAR_WIRE_HEADER],ack[12],expected[12]={'A','C','K','2'};
     sonar_frame_header(header,&meta,bytes,crc);
-    memcpy(expected+4,header+12,4); memcpy(expected+8,header+72,4);
+    memcpy(expected+4,header+12,4);
+    memcpy(expected+8,header+72,4);
+
     TickType_t began=xTaskGetTickCount();
     if (!transfer(fd,header,sizeof(header),true,began,"header") ||
-        (slot>=0 && !transfer(fd,sonar_frame_data[slot],bytes,true,began,"payload")) ||
-        !transfer(fd,ack,sizeof(ack),false,began,"ACK")) { return false; }
-    if (memcmp(ack,expected,sizeof(ack))!=0) { note("invalid ACK; frame retained."); return false; }
+        (slot>=0 && !transfer(fd,payload,bytes,true,began,"payload")) ||
+        !transfer(fd,ack,sizeof(ack),false,began,"ACK")) {
+        return false;
+    }
+
+    if (memcmp(ack,expected,sizeof(ack))!=0) {
+        note("invalid ACK; frame retained.");
+        return false;
+    }
     return true;
 }
 static void serve(int fd)
@@ -172,6 +198,8 @@ void sonar_network_task(void *unused)
     if (sys_thread_new("eth_input",(void (*)(void *))xemacif_input_thread,&ethernet,2048,2)==NULL) {
         note("input task allocation failed."); vTaskDelete(NULL); return;
     }
+    if (!sonar_tcp_console_start()) { note("TCP console creation failed; inspect UART diagnostics."); }
+    if (!sonar_control_server_start()) { note("control-server task creation failed; scan configuration unavailable."); }
     int listener=lwip_socket(AF_INET,SOCK_STREAM,0);
     struct sockaddr_in address;
     memset(&address,0,sizeof(address)); address.sin_family=AF_INET;

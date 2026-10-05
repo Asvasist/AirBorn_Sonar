@@ -6,7 +6,7 @@
 #define SONAR_PL_CODEC_READY UINT32_C(2)
 /* Shared two-bit GPIO owner. Task callers only; updates are indivisible.
  * First init drives both bits low. Later init calls preserve the output.
- * A readback failure latches until processor reset. */
+ * Output state is maintained in a software shadow. */
 bool sonar_pl_gpio_init(void);
 bool sonar_pl_gpio_update(uint32_t mask, uint32_t value);
 #endif

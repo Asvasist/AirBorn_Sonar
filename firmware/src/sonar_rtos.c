@@ -129,18 +129,18 @@ bool sonar_rtos_create(const sonar_timing_t *timing)
                                         queue_bytes, &queue_storage);
     if (heartbeat_queue == NULL) { return false; }
     producer_handle = xTaskCreateStatic(producer_task, "heartbeat", SONAR_TASK_STACK_WORDS,
-        NULL, tskIDLE_PRIORITY + 1U, producer_stack, &producer_storage);
+        NULL, tskIDLE_PRIORITY + 3U, producer_stack, &producer_storage);
     if (producer_handle == NULL) { return false; }
     supervisor_handle = xTaskCreateStatic(supervisor_task, "supervisor", SONAR_TASK_STACK_WORDS,
-        NULL, tskIDLE_PRIORITY + 2U, supervisor_stack, &supervisor_storage);
+        NULL, tskIDLE_PRIORITY + 3U, supervisor_stack, &supervisor_storage);
     return supervisor_handle != NULL;
 #else
     /* Allocate once at startup. Neither task allocates memory while running. */
     heartbeat_queue = xQueueCreate(SONAR_QUEUE_LENGTH, sizeof(sonar_heartbeat_t));
     if (heartbeat_queue == NULL) { return false; }
     if (xTaskCreate(producer_task, "heartbeat", SONAR_TASK_STACK_WORDS, NULL,
-                    tskIDLE_PRIORITY + 1U, &producer_handle) != pdPASS) { return false; }
+                    tskIDLE_PRIORITY + 3U, &producer_handle) != pdPASS) { return false; }
     return xTaskCreate(supervisor_task, "supervisor", SONAR_TASK_STACK_WORDS, NULL,
-                       tskIDLE_PRIORITY + 2U, &supervisor_handle) == pdPASS;
+                       tskIDLE_PRIORITY + 3U, &supervisor_handle) == pdPASS;
 #endif
 }

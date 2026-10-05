@@ -33,7 +33,7 @@ int main(void)
     uint32_t mismatch;
 
     xil_printf("\r\nAirborne Circular Sonar - Stage 2\r\n");
-    xil_printf("Build: startup peripheral diagnostics 2026-09-28\r\n");
+    xil_printf("Build: Ethernet console 5004 / GPIO GENERATE 2026-10-02\r\n");
     xil_printf("Design reference: %s\r\n", SONAR_MIC_HARDWARE_NAME);
     tests = sonar_selftest_run(report_test);
     microphone_tests = sonar_mic_selftest_run(report_test);

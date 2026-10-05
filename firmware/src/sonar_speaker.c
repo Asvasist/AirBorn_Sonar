@@ -2,11 +2,12 @@
 #include "sonar_config.h"
 #include <stddef.h>
 
-/* Register/value pairs from the ZIP's ssm2603_init_i2c.v. Volume is supplied
+/* Fixed 96 kHz TX: SSM2603 R8=0x01c, normal mode, 12.288 MHz MCLK.
+ * Source: SSM2603 Rev D Table 30 (analog.com datasheet). Volume is supplied
  * separately; waveform data, I2S generation and repeats remain FPGA-owned. */
 static const struct { uint8_t reg; uint16_t value; } sequence[SONAR_CODEC_WRITES] = {
     {0x0fU, 0x000U}, {0x06U, 0x077U}, {0x02U, 0x17fU}, {0x03U, 0x17fU},
-    {0x04U, 0x010U}, {0x05U, 0x000U}, {0x07U, 0x002U}, {0x08U, 0x000U},
+    {0x04U, 0x010U}, {0x05U, 0x000U}, {0x07U, 0x002U}, {0x08U, 0x01cU},
     {0x09U, 0x001U}, {0x06U, 0x067U}
 };
 

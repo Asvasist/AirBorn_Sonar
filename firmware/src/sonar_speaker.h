@@ -39,7 +39,7 @@ typedef struct {
     bool bus_owned, output_enabled, mute_confirmed;
 } sonar_speaker_t;
 
-/* The same 16-bit I2S/48 kHz sequence as the supplied codec initializer.
+/* 16-bit I2S/96 kHz, codec slave, normal mode, 12.288 MHz MCLK.
  * Timing is rounded up from its 10 ms power-up and 80 ms VMID delays.
  * Bus deadline is a software policy of 100 ms per transaction. */
 bool sonar_speaker_default_config(uint32_t tick_hz, sonar_speaker_config_t *config);
