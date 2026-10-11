@@ -8,18 +8,32 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "host"))
 from sonar_gui import SonarApp
 from test_gui_control import status, APPLIED
+from test_ethernet import BOOT, TEST, TEST2
 
 
 class FakeWorker:
     def __init__(self):
         self.sent = []
         self.stopped = False
+        self.tests = []
     def send(self, command):
         self.sent.append(command)
     def is_alive(self):
         return not self.stopped
     def stop(self):
         self.stopped = True
+    def begin_test(self, first, positions, folder, config_id, *, boot_id, test_id):
+        self.identity = (boot_id, test_id)
+        self.tests.append((first, positions, folder, config_id))
+        return Path(f"D:/test_{len(self.tests)}")
+    def request_test_stop(self):
+        pass
+    def finish_test(self, cycle):
+        pass
+    def reset_board(self):
+        pass
+    def cleanup(self):
+        pass
 
 
 class GuiViewTests(unittest.TestCase):
@@ -47,6 +61,7 @@ class GuiViewTests(unittest.TestCase):
         app.handle("line", status())
         app.render()
         self.assertEqual(str(app.start_button["state"]), "normal")
+        app.endpoint = dict(folder="cached_configuration")
         app.steps.set("45")
         with patch.object(app, "audio_job") as job:
             app.start()
@@ -57,6 +72,7 @@ class GuiViewTests(unittest.TestCase):
         app.handle("line", status(steps=45))
         app.handle("line", status("ACQUIRE", steps=45, used=1))
         self.assertEqual(app.console_worker.sent, [b"s", b"n", b"45\r", b"r"])
+        self.assertEqual(app.ethernet_worker.tests, [(4,45,"cached_configuration",1)])
         app.stop()
         self.assertEqual(app.console_worker.sent[-1], b"x")
         self.assertFalse(app.ethernet_worker.stopped)
@@ -77,6 +93,33 @@ class GuiViewTests(unittest.TestCase):
         self.assertIn("15,000 bytes", app.capture_text.get())
         self.assertIn("3.125 ms", app.detail_text.get())
         self.assertEqual(str(app.start_button["state"]), "disabled")
+
+    def test_stop_drain_start_allocates_another_test(self):
+        app=self.app
+        app.handle("console",True)
+        app.handle("ethernet",True)
+        app.control.audio_configuration(APPLIED)
+        app.handle("line",status())
+        app.endpoint=dict(folder="cached_configuration")
+        app.steps.set("3")
+        def begin(cycle):
+            with patch.object(app,"audio_job"):app.start()
+            app.handle_audio(app.audio_token,"verify",dict(APPLIED, test_id=TEST if cycle==3 else TEST2))
+            app.handle("line","Enter signed positions per 360 degrees (1..1000), then Enter:")
+            app.handle("line","Positions-per-revolution stored.")
+            app.handle("line",status(steps=3).replace("cycle=3",f"cycle={cycle}"))
+        begin(3)
+        first=app.session_folder
+        app.handle("line",status("ACQUIRE",steps=3,used=1).replace("cycle=3","cycle=4"))
+        app.stop()
+        app.handle("line",status("STOPPED",steps=3,used=1).replace("cycle=3","cycle=4"))
+        app.render()
+        self.assertEqual(str(app.start_button['state']),'disabled')
+        self.assertIn('previous test',app.guidance.get())
+        app.handle("line",status("STOPPED",steps=3,used=0).replace("cycle=3","cycle=4"))
+        begin(4)
+        self.assertNotEqual(first,app.session_folder)
+        self.assertEqual([t[0] for t in app.ethernet_worker.tests],[4,5])
 
     def test_default_layout_fits_window(self):
         self.root.update_idletasks()

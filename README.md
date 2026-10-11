@@ -53,8 +53,10 @@ For each of the N positions per revolution (1–1000, chosen by the user):
    `hardware/airborne_sonar.xsa` and `firmware/` (details in
    [firmware/README.md](firmware/README.md)), then run on `ps7_cortexa9_0`.
 2. Connect the board's Ethernet port directly to the PC.
-3. Start the GUI: `gui\Start_Sonar_GUI.cmd`, connect, apply a transmit
-   setting, choose the number of positions and press **Start**.
+3. Start `gui\Start_Sonar_GUI.cmd`, connect, apply a transmit setting, choose
+   the number of positions and press **Start**. The GUI supports the current
+   `ASN3` capture and `ASC2` version-2 control protocol and prepares a fresh
+   recording identity for every test.
 
 ## Engineering
 
@@ -65,8 +67,8 @@ For each of the N positions per revolution (1–1000, chosen by the user):
   stalls.
 - **Loss-free transfer:** captures stay in a DDR slot until the
   host acknowledges the CRC-checked record.
-- **Tests:** 92 host unit tests for the firmware (run under ASan/UBSan in CI)
-  and 51 for the GUI; clang-format and cppcheck gates.
+- **Tests:** 93 host unit tests for the firmware (run under ASan/UBSan in CI)
+  and 86 for the GUI; clang-format and cppcheck gates.
 
 ## License
 

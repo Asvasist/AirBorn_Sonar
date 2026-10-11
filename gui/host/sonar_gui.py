@@ -2,6 +2,7 @@
 """Desktop controls for the GENERATE/WAV BRAM Vitis application."""
 import os
 from pathlib import Path
+from sonar_test_store import identity
 import queue
 from sonar_configure import playback_description
 import time
@@ -28,6 +29,7 @@ class SonarApp:
         self.endpoint = self.network_args = None
         self.probe_pending = False
         self.pending_start = None
+        self.pending_identity = None
         self.audio_capabilities = None
         self.disconnecting = False
         self.close_after = False
@@ -36,7 +38,7 @@ class SonarApp:
         self.session_folder = None
         self.deliveries = self.saved_bytes = 0
         self.last_error = ""
-        self.control = ExperimentControl(self.send, self.log)
+        self.control = ExperimentControl(self.send, self.log, before_run=self.prepare_recording_test)
         self.output = tk.StringVar(value=r"D:\SonarCaptures")
         self.adapter = tk.StringVar(value="Ethernet")
         self.board_ip = tk.StringVar()
@@ -194,7 +196,7 @@ class SonarApp:
     def open_folder(self):
         folder = self.session_folder or Path(self.output.get()).expanduser()
         if not folder.is_dir():
-            messagebox.showinfo("Recordings", "The folder will be created when the receiver connects.", parent=self.root)
+            messagebox.showinfo("Recordings", "A test folder is created when the first completed recording arrives after Start.", parent=self.root)
             return
         try:
             os.startfile(str(folder))
@@ -222,6 +224,7 @@ class SonarApp:
         if self.audio_worker is not None:
             self.audio_worker.stop()
         self.pending_start = None
+        self.pending_identity = None
 
     def audio_job(self, action, request=None, expected=None):
         if self.audio_busy():
@@ -300,13 +303,14 @@ class SonarApp:
             self.control.audio_configuration(reply)
             mode = "WAV" if reply["mode"] else "GENERATE"
             self.audio_text.set(f"Applied #{reply['config_id']}: {mode}, {reply['duration_us']/1000:g} ms, {reply['amplitude_pct']}%, 96 kHz.")
-            self.log(f"Audio applied; configuration saved to {manifest}")
+            self.log(f"Audio applied; configuration cached for the next test: {manifest}")
             self.send(b"s")
         elif kind == "verify":
             pending = self.pending_start
             self.pending_start = None
             if pending is not None and not (self.disconnecting or self.exit_pending):
                 try:
+                    self.pending_identity = (identity(value.get("boot_id")), identity(value.get("test_id")))
                     self.control.start(*pending)
                     self.audio_text.set(f"Configuration #{value['config_id']} verified. Starting scan...")
                 except (ValueError, OSError) as error:
@@ -330,7 +334,7 @@ class SonarApp:
             self.cancel_audio()
             self.session_folder = None
             self.last_error = ""
-            self.control = ExperimentControl(self.send, self.log)
+            self.control = ExperimentControl(self.send, self.log, before_run=self.prepare_recording_test)
             self.endpoint = None
             self.audio_capabilities = None
             self.invalidate_audio("Connect, choose audio settings, then Apply.")
@@ -376,12 +380,28 @@ class SonarApp:
             messagebox.showerror("Cannot start", str(error), parent=self.root)
         self.render()
 
+    def prepare_recording_test(self, first_sequence, positions):
+        if self.ethernet_worker is None or self.endpoint is None:
+            raise ValueError("The recording receiver is not connected.")
+        if self.pending_identity is None:
+            raise ValueError("The board has not confirmed a recording identity. Retry Start.")
+        config_id = self.control.applied_audio["config_id"]
+        folder = self.ethernet_worker.begin_test(first_sequence, positions,
+                                               self.endpoint["folder"], config_id,
+                                               boot_id=self.pending_identity[0], test_id=self.pending_identity[1])
+        self.session_folder = Path(folder)
+        self.deliveries = self.saved_bytes = 0
+        self.detail_text.set("Waiting for the first completed recording of this test.")
+        self.log(f"New test destination: {folder}. Created when the first recording arrives.")
+
     def stop(self):
         try:
             if self.audio_busy():
                 self.cancel_audio()
                 self.invalidate_audio("Audio operation cancelled. Check/apply settings again before Start.")
             self.control.stop()
+            if self.ethernet_worker is not None:
+                self.ethernet_worker.request_test_stop()
         except (ValueError, OSError) as error:
             self.log(str(error))
             messagebox.showerror("Stop not sent", str(error), parent=self.root)
@@ -455,17 +475,32 @@ class SonarApp:
         elif kind == "audio":
             self.handle_audio(*value)
         elif kind == "line":
+            previous_cycle = self.control.cycle
             if value.startswith("INIT:"):
                 self.cancel_audio()
                 self.invalidate_audio("Board restarted. Reconnect and apply settings again.")
+                if self.ethernet_worker is not None:
+                    self.ethernet_worker.reset_board()
             self.control.line(value)
+            if self.ethernet_worker is not None:
+                if self.control.cycle < previous_cycle:
+                    self.ethernet_worker.reset_board()
+                if self.control.drained:
+                    self.ethernet_worker.finish_test(self.control.cycle)
             if value and not value.startswith(("HEALTH RUNNING", "SONAR IDLE", "SONAR STOPPED")):
                 self.log(value)
         elif kind == "folder":
+            if (self.pending_identity is not None and self.session_folder is not None
+                    and Path(value) != self.session_folder):
+                self.log(f"Saved delayed/recovered capture to its original folder: {value}")
+                return
             self.session_folder = Path(value)
             self.log(f"Saving recordings in {value}")
         elif kind == "record":
             path, meta = value
+            if self.pending_identity is not None and (meta.get("boot_id"), meta.get("test_id")) != self.pending_identity:
+                self.log(f"Saved delayed/recovered capture to its own identity: {path}")
+                return
             self.deliveries += 1
             self.saved_bytes += meta["payload_bytes"]
             self.detail_text.set(f"Last capture: cycle {meta['cycle']} | {meta.get('tx_mode', 'UNKNOWN')} "
@@ -505,9 +540,11 @@ class SonarApp:
                     else:
                         self.exit_deadline = time.monotonic() + 90
             if self.disconnecting and self.events.empty() and not self.retired_consoles and all(w is None or not w.is_alive() for w in (self.console_worker, self.ethernet_worker, self.audio_worker)):
+                if self.ethernet_worker is not None:
+                    self.ethernet_worker.cleanup()
                 self.console_worker = self.ethernet_worker = None
                 self.disconnecting = False
-                self.control = ExperimentControl(self.send, self.log)
+                self.control = ExperimentControl(self.send, self.log, before_run=self.prepare_recording_test)
                 if self.close_after:
                     self.root.destroy()
                     return
@@ -538,7 +575,7 @@ class SonarApp:
         (self.generated_frame if wav else self.wav_frame).grid_remove()
         (self.wav_frame if wav else self.generated_frame).grid()
         self.audio_note.configure(textvariable=self.wav_info if wav else "",
-                                  text="TX: 1-47,999 Hz; up to 49 ms. RX filter cutoff remains 12 kHz; use the current sonar band." if not wav else "")
+                                  text="TX: 1-47,999 Hz; up to 49 ms. RX passband: 0–46 kHz at 96 kHz recording rate." if not wav else "")
         supported = self.audio_capabilities is None or bool(self.audio_capabilities & (2 if wav else 1))
         self.apply_button.configure(text="Upload & apply" if wav else "Apply settings",
                                     state="normal" if c.can_configure and self.endpoint and supported and not busy and not audio_busy else "disabled")
@@ -553,8 +590,10 @@ class SonarApp:
             hint = "Audio operation in progress. Start is disabled until the board confirms the settings. Stop remains available."
         elif c.error:
             hint = c.error
+        elif c.can_configure and c.ddr > 0:
+            hint = "Saving the previous test's queued recordings. Start is available when DDR reaches 0."
         elif c.can_start:
-            hint = "Ready. Enter positions per 360°, choose direction and click Start experiment. Keep divisor 1; the 360° calibration assumes full steps."
+            hint = "Ready. Each Start creates a separate test folder when its first recording arrives. Keep divisor 1 for the 360° calibration."
         elif c.can_configure:
             hint = "Choose Generate chirp or Upload WAV, then apply the audio settings before starting the scan."
         elif c.phase != "idle":

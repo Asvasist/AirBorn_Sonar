@@ -21,8 +21,9 @@ def parse_steps(text, reverse=False):
 
 
 class ExperimentControl:
-    def __init__(self, send, notify, now=time.monotonic):
+    def __init__(self, send, notify, now=time.monotonic, before_run=None):
         self.send, self.notify, self.now = send, notify, now
+        self.before_run = before_run
         self.console_up = self.ethernet_up = False
         self.receiver_confirmed = self.fault_latched = False
         self.board_state = "UNKNOWN"
@@ -51,7 +52,7 @@ class ExperimentControl:
 
     @property
     def can_start(self):
-        return self.can_configure and self.audio_matches
+        return self.can_configure and self.audio_matches and self.ddr == 0
 
     def audio_configuration(self, value):
         self.applied_audio = dict(value) if value else None
@@ -91,7 +92,7 @@ class ExperimentControl:
     def start(self, text, reverse=False):
         steps = parse_steps(text, reverse)
         if not self.can_start:
-            raise ValueError("Apply audio settings and wait for matching idle-board and Ethernet confirmations before starting.")
+            raise ValueError("Apply audio settings and wait for matching idle-board/Ethernet confirmations and an empty DDR queue before starting.")
         self.error = ""
         self.requested = steps
         self.stored = False
@@ -164,10 +165,17 @@ class ExperimentControl:
             self.error = "Board fault. Read the activity log; reset in Vitis only after saving queued captures."
         elif self.phase == "value" and self.stored:
             if (state not in IDLE_STATES or self.steps != self.requested or not self.ethernet_up
-                    or receiver != "1" or not self.audio_matches):
+                    or receiver != "1" or not self.audio_matches or self.ddr != 0):
                 self.error = "Board positions/audio/receiver confirmation did not match; start cancelled."
                 self.stop()
             else:
+                try:
+                    if self.before_run is not None:
+                        self.before_run(self.cycle + 1, self.requested)
+                except (OSError, ValueError) as error:
+                    self.error = f"Recording test could not be prepared: {error}"
+                    self.stop()
+                    return
                 self.send(b"r")
                 self.phase = "starting"
                 self.deadline = self.now() + 10.0

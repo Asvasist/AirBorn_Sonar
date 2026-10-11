@@ -1,6 +1,6 @@
 #include "sonar_control_server.h"
 #include "sonar_control_protocol.h"
-#include "sonar_experiment.h"
+#include "sonar_control_service.h"
 #include "sonar_frames.h"
 #include "sonar_console.h"
 #include "sonar_socket.h"
@@ -94,7 +94,7 @@ static void serve(int fd, uint32_t session)
             break;
         }
         /* Never allow the wire client to invoke the internal cleanup opcode. */
-        if (op < CTRL_GET_CAPABILITIES || op > CTRL_UPLOAD_CANCEL || id == 0U || id <= last ||
+        if (op < CTRL_GET_CAPABILITIES || op > CTRL_PREPARE_TEST || id == 0U || id <= last ||
             token == UINT32_MAX) {
             break;
         }

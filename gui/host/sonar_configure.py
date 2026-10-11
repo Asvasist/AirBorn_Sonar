@@ -16,6 +16,8 @@ import socket
 import struct
 import sys
 import zlib
+import uuid
+import re
 from sonar_wav_format import inspect_wav, prepare_wav
 from sonar_sample_rates import TX_SAMPLE_HZ
 
@@ -29,6 +31,8 @@ FIELDS = (
     "upload_received", "sample_hz", "max_samples", "capture_us",
     "start_margin_us", "available_pcm_crc32", "fpga_status", "pending_flags",
     "rx_filter_cutoff_hz",
+    "boot_word_0", "boot_word_1", "boot_word_2", "boot_word_3",
+    "test_word_0", "test_word_1", "test_word_2", "test_word_3",
 )
 ERRORS = (
     "OK", "BAD_REQUEST", "BUSY", "RANGE_OR_WAV_FORMAT", "CHECKSUM_OR_INCOMPLETE",
@@ -52,9 +56,15 @@ def crc32(data: bytes) -> int:
 def packet(opcode: int, request_id: int, payload: bytes = b"") -> bytes:
     if len(payload) > MAX_PAYLOAD:
         raise ValueError("Control payload exceeds 1024 bytes")
-    head = HEADER.pack(b"ASC1", 1, HEADER.size, opcode, request_id,
+    head = HEADER.pack(b"ASC2", 2, HEADER.size, opcode, request_id,
                        len(payload), crc32(payload), 0)
     return head[:24] + struct.pack("<I", crc32(head[:24])) + payload
+
+
+def identity_bytes(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}", value) or value == "0" * 32:
+        raise ValueError("A nonzero boot/test identity is required.")
+    return bytes.fromhex(value)
 
 
 class BoardError(RuntimeError):
@@ -96,14 +106,16 @@ class ControlClient:
         self.socket.sendall(packet(opcode, self.request_id, payload))
         head = self._read_exact(HEADER.size)
         magic, version, size, op, rid, count, payload_crc, header_crc = HEADER.unpack(head)
-        if (magic != b"ASC1" or version != 1 or size != HEADER.size
+        if (magic != b"ASC2" or version != 2 or size != HEADER.size
                 or op != opcode | 0x80000000 or rid != self.request_id
                 or count != len(FIELDS) * 4 or crc32(head[:24]) != header_crc):
             raise ValueError("Invalid control response header")
         data = self._read_exact(count)
         if crc32(data) != payload_crc:
             raise ValueError("Invalid control response checksum")
-        reply = dict(zip(FIELDS, struct.unpack("<22I", data)))
+        reply = dict(zip(FIELDS, struct.unpack("<30I", data)))
+        reply["boot_id"] = struct.pack("<4I", *(reply[f"boot_word_{i}"] for i in range(4))).hex()
+        reply["test_id"] = struct.pack("<4I", *(reply[f"test_word_{i}"] for i in range(4))).hex()
         if reply["error"]:
             raise BoardError(reply)
         return reply
@@ -111,9 +123,30 @@ class ControlClient:
     def status(self) -> dict:
         return self.request(8)
 
+    def ensure_boot_identity(self) -> dict:
+        reply = self.request(1)
+        if reply["boot_id"] == "0" * 32:
+            boot = uuid.uuid4().bytes
+            reply = self.request(10, boot)
+            if reply["boot_id"] != boot.hex():
+                raise ValueError("Board did not confirm its boot identity.")
+        identity_bytes(reply["boot_id"])
+        return reply
+
+    def prepare_test(self, boot_id: str, config_id: int) -> dict:
+        if not isinstance(config_id, int) or not 1 <= config_id <= 65535:
+            raise ValueError("Apply a valid configuration before preparing a test.")
+        test = uuid.uuid4().bytes
+        reply = self.request(11, identity_bytes(boot_id) + test + struct.pack("<I", config_id))
+        if (reply["boot_id"] != boot_id or reply["test_id"] != test.hex()
+                or reply["config_id"] != config_id or not reply["active_valid"]
+                or reply["pending_flags"]):
+            raise ValueError("Board did not confirm the requested recording identity.")
+        return reply
+
     def generate(self, start_hz: int, stop_hz: int, duration_us: int,
                  amplitude_pct: int) -> dict:
-        caps = self.request(1)
+        caps = self.ensure_boot_identity()
         if not caps["capabilities"] & 1:
             raise RuntimeError("FPGA GENERATE interface is unavailable")
         if caps["sample_hz"] != TX_SAMPLE_HZ:
@@ -138,7 +171,7 @@ class ControlClient:
         # Inspect before UPLOAD_BEGIN: the board has one buffer and a new upload
         # invalidates its previous WAV. Unsupported files must not overwrite it.
         info = inspect_wav(data, sample_hz=TX_SAMPLE_HZ)
-        caps = self.request(1)
+        caps = self.ensure_boot_identity()
         if not caps["capabilities"] & 2:
             raise RuntimeError(playback_description(caps))
         if not caps["capabilities"] & 4 and amplitude_pct != 100:
@@ -198,6 +231,7 @@ def main(argv=None) -> int:
                         help="Save applied configuration here; keep it with your recordings")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
+    sub.add_parser("prepare-test", help="Prepare a fresh test identity before using the Ethernet console Start command")
     gen = sub.add_parser("generate")
     gen.add_argument("--start-hz", type=bounded_u32, required=True)
     gen.add_argument("--stop-hz", type=bounded_u32, required=True)
@@ -228,15 +262,18 @@ def main(argv=None) -> int:
                 reply = client.generate(args.start_hz, args.stop_hz, args.duration_us, args.amplitude)
             elif args.command == "wav":
                 reply = client.upload_wav(data, args.amplitude)
+            elif args.command == "prepare-test":
+                current = client.ensure_boot_identity()
+                reply = client.prepare_test(current["boot_id"], current["config_id"])
             else:
                 reply = client.status()
         print(json.dumps(reply, indent=2))
         if args.command != "status":
             now = dt.datetime.now(dt.timezone.utc)
-            manifest = {"protocol": "ASC1-v1", "board": args.board,
+            manifest = {"protocol": "ASC2-v2", "board": args.board,
                         "configured_at_utc": now.isoformat(), "configuration": reply,
                         "source_wav": source, "rx_sample_hz": 96000,
-                        "id_scope": "config_id is unique only until the board resets"}
+                        "id_scope": "Configuration IDs are scoped to the explicit board boot identity."}
             path = args.manifest_dir / f"{now:%Y%m%dT%H%M%S.%fZ}_config_{reply['config_id']:05d}.json"
             try:
                 if args.command == "wav":
@@ -252,7 +289,7 @@ def main(argv=None) -> int:
                 print(f"Configuration WAS applied, but manifest could not be saved: {error}", file=sys.stderr)
                 return 2
             print(f"Applied config {reply['config_id']}; manifest: {path}")
-            print("Use the GUI/Ethernet console to start; x stops.")
+            print("Use GUI Start, or run prepare-test before Ethernet console Start; x stops.")
         return 0
     except (OSError, ValueError, RuntimeError, struct.error) as error:
         print(str(error), file=sys.stderr)

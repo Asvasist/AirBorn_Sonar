@@ -75,8 +75,8 @@ void sonar_frame_header(uint8_t out[SONAR_WIRE_HEADER], const sonar_frame_meta_t
                         uint32_t crc)
 {
     memset(out, 0, SONAR_WIRE_HEADER);
-    memcpy(out, "ASN2", 4);
-    put(out + 4, 1, 2);
+    memcpy(out, "ASN3", 4);
+    put(out + 4, 2, 2);
     put(out + 6, SONAR_WIRE_HEADER, 2);
     put(out + 8, bytes, 4);
     put(out + 12, m->sequence, 4);
@@ -92,5 +92,9 @@ void sonar_frame_header(uint8_t out[SONAR_WIRE_HEADER], const sonar_frame_meta_t
     put(out + 64, m->tx_duration_us, 4);
     put(out + 68, (uint64_t)SONAR_ACQ_WORDS * 2U * 1000000U / SONAR_ACQ_PDM_HZ, 4);
     put(out + 72, crc, 4);
-    put(out + 76, sonar_crc32(out, 76), 4);
+    for (unsigned i = 0U; i < 4U; ++i) {
+        put(out + 76U + i * 4U, m->boot_id[i], 4U);
+        put(out + 92U + i * 4U, m->test_id[i], 4U);
+    }
+    put(out + 108, sonar_crc32(out, 108), 4);
 }

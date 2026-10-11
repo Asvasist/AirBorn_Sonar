@@ -1,5 +1,5 @@
 #include "sonar_component_selftest.h"
-#include "sonar_pdm.h"
+#include "sonar_pdm_decimator.h"
 #include <string.h>
 
 #define CHECK(condition)                                                                           \

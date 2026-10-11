@@ -31,25 +31,19 @@ class CaptureStore:
         self.batch_us = None
 
     def save(self, meta, payload):
-        second = meta["trigger_request_us"] // 1_000_000
-        folder = self.folder / f"second_{second:010d}"
-        folder.mkdir(parents=True, exist_ok=True)
         if not payload:
             self.batch_us = meta["trigger_request_us"]
-            write_json(folder / "batch.json", {
-                "kind": "batch_start", "board_batch_release_us": self.batch_us,
-                "pc_received_utc": utc_now(),
-                "note": "A batch marker is not microphone data. Recordings are capture_*.wav (PCM) or capture_*.bin (raw PDM) files.",
-            })
             return None
-
-        stem = folder / f"capture_{meta['sequence']:010d}"
         wav_payload = is_wav(payload, meta)
         pcm_info = None
         if wav_payload:
             # Validate before persistence/ACK; preserve the original bytes exactly.
             _, channels, rate, frames = read_pcm_wav(payload, meta.get("channels", 16))
             pcm_info = dict(pcm_sample_hz=rate, pcm_channels=channels, pcm_frames=frames)
+        second = meta["trigger_request_us"] // 1_000_000
+        folder = self.folder / f"second_{second:010d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        stem = folder / f"capture_{meta['sequence']:010d}"
         extension = ".wav" if wav_payload else ".bin"
         binary, description = stem.with_suffix(extension), stem.with_suffix(".json")
         alternate = stem.with_suffix(".bin" if wav_payload else ".wav")
@@ -74,7 +68,12 @@ class CaptureStore:
                     c = saved["configuration"]
                     mode = "WAV" if c["mode"] == 1 else "GENERATE"
                     if (c["config_id"] == config_id and mode == meta.get("tx_mode")
-                            and c["duration_us"] == meta.get("tx_duration_us")):
+                            and c["duration_us"] == meta.get("tx_duration_us")
+                            and c.get("boot_id") == meta.get("boot_id")
+                            and meta.get("boot_id")
+                            and (not saved.get("recording_identity") or
+                                 saved["recording_identity"] == dict(boot_id=meta.get("boot_id"),
+                                                                     test_id=meta.get("test_id")))):
                         old["transmit_configuration"] = saved
                         old["configuration_status"] = "matched"
                         old["configuration_manifest"] = str(manifest.relative_to(self.folder))

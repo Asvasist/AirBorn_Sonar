@@ -27,15 +27,15 @@ collector_list(_deps PROJECT_LIB_DEPS)
 list(APPEND _deps ${USER_LINK_LIBRARIES})
 
 # Explicit sources prevent a retained template main() from entering the build.
-set(_sources main.c sonar_config.c sonar_health.c sonar_profile.c sonar_platform.c
-    sonar_rtos.c sonar_fault.c sonar_console.c sonar_console_buffer.c sonar_tcp_console.c
-    sonar_sequencer.c sonar_cycle.c sonar_frames.c sonar_number.c sonar_scan360.c
-    sonar_mic.c sonar_mic_zynq.c sonar_pdm.c sonar_wav.c sonar_processing.c sonar_network.c
+set(_sources main.c sonar_config.c sonar_health.c sonar_bsp_validation.c sonar_bsp_profile.c
+    sonar_supervisor.c sonar_fault.c sonar_console.c sonar_console_buffer.c sonar_tcp_console.c
+    sonar_experiment_coordinator.c sonar_measurement_cycle.c sonar_frames.c sonar_integer_parser.c sonar_scan360.c
+    sonar_mic.c sonar_mic_zynq.c sonar_pdm_decimator.c sonar_wav_writer.c sonar_rx_processing.c sonar_ethernet.c
     sonar_stepper.c sonar_ps_i2c.c sonar_motor_zynq.c
-    sonar_speaker.c sonar_speaker_board.c sonar_codec_bus.c sonar_pl_gpio.c
-    sonar_chirp.c sonar_waveform.c sonar_tx_bram.c sonar_wav_player.c
-    sonar_experiment_config.c sonar_experiment.c
-    sonar_control_protocol.c sonar_control_server.c sonar_socket.c)
+    sonar_codec_service.c sonar_codec_board.c sonar_codec_bus.c sonar_pl_gpio.c
+    sonar_tx_control.c sonar_waveform_upload.c sonar_tx_bram.c sonar_pcm_playback_control.c
+    sonar_experiment_config.c sonar_control_service.c
+    sonar_control_protocol.c sonar_control_server.c sonar_socket.c sonar_identity.c)
 # Use the application's existing memory layout; generated templates are optional.
 if(NOT USER_LINKER_SCRIPT)
     set(USER_LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/lscript.ld")
@@ -49,6 +49,22 @@ string(APPEND CMAKE_C_FLAGS ${USER_COMPILE_OPTIONS})
 string(APPEND CMAKE_C_LINK_FLAGS ${USER_LINK_OPTIONS})
 add_dependency_on_bsp(_sources)
 add_executable(${APP_NAME}.elf ${_sources})
+# Two-stage RX filter package. Comparison adds a separate old-filter buffer;
+# keep it OFF for the normal build and turn ON only for a board benchmark.
+option(SONAR_RX_COMPARE_LEGACY "Benchmark old and new RX filters on each identical raw frame" OFF)
+option(SONAR_RX_DSP_TIMING "Log elapsed 16-channel PDM conversion time" ON)
+if(SONAR_RX_COMPARE_LEGACY)
+    target_sources(${APP_NAME}.elf PRIVATE sonar_pdm_decimator_legacy_benchmark.c)
+endif()
+target_compile_definitions(${APP_NAME}.elf PRIVATE
+    SONAR_RX_COMPARE_LEGACY=$<BOOL:${SONAR_RX_COMPARE_LEGACY}>
+    SONAR_RX_DSP_TIMING=$<BOOL:${SONAR_RX_DSP_TIMING}>)
+# Restrict optimization to DSP sources. Both backends get the same setting.
+set_source_files_properties(sonar_pdm_decimator.c sonar_pdm_decimator_legacy_benchmark.c PROPERTIES
+    COMPILE_OPTIONS "-O2;-fstack-usage")
+target_link_options(${APP_NAME}.elf PRIVATE
+    "-Wl,-Map=${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.map" "-Wl,--cref")
+
 set_target_properties(${APP_NAME}.elf PROPERTIES
     C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO
     LINK_DEPENDS "${USER_LINKER_SCRIPT}")

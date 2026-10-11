@@ -16,9 +16,17 @@ from capture_store import CaptureStore
 from plot_ethernet import channel_bits
 
 
-def record(payload=b"\x01\x80\x02\x40", seq=1, stamp=100):
-    raw = HEADER.pack(b"ASN2", 1, 80, len(payload), seq, seq, 15, 16, 2400000,
-                      stamp, stamp + 100, -8, -4, 2, 2000000, 3125, zlib.crc32(payload), 0)
+BOOT = "11111111222222223333333344444444"
+TEST = "55555555666666667777777788888888"
+BOOT2 = "99999999222222223333333344444444"
+TEST2 = "aaaaaaaa666666667777777788888888"
+
+
+def record(payload=b"\x01\x80\x02\x40", seq=1, stamp=100, *, boot_id=BOOT, test_id=TEST):
+    raw = HEADER.pack(b"ASN3", 2, HEADER.size, len(payload), seq, seq, 15, 16, 2400000,
+                      stamp, stamp + 100, -8, -4, 2, 35000, 50000, zlib.crc32(payload),
+                      *struct.unpack("<4I", bytes.fromhex(boot_id)),
+                      *struct.unpack("<4I", bytes.fromhex(test_id)), 0)
     return raw[:-4] + struct.pack("<I", zlib.crc32(raw[:-4])) + payload
 
 
@@ -56,14 +64,14 @@ class EthernetTests(unittest.TestCase):
                 self.assertEqual(path.read_bytes(), b"\x01\x80\x02\x40")
                 saved = json.loads(path.with_suffix(".json").read_text())
                 self.assertTrue(all(saved[key] == value for key, value in meta.items()))
-                self.assertEqual(sock.sent, struct.pack("<4sII", b"ACK2", 1, zlib.crc32(path.read_bytes())))
+                self.assertEqual(sock.sent, struct.pack("<4sII", b"ACK3", 1, zlib.crc32(path.read_bytes())))
             self.assertEqual(len(list(Path(folder).rglob("*.bin"))), 1)
             self.assertFalse(list(Path(folder).rglob("*.part")))
 
     def test_bad_checksum_and_truncation_no_ack(self):
         with tempfile.TemporaryDirectory() as folder:
             store = CaptureStore(folder)
-            for data in (record()[:-1], record()[:-1] + b"\xff", bytes(80)):
+            for data in (record()[:-1], record()[:-1] + b"\xff", bytes(HEADER.size)):
                 sock = Fragmented(data)
                 with self.assertRaises((EOFError, ValueError)):
                     receive_record(sock, store)
@@ -80,15 +88,13 @@ class EthernetTests(unittest.TestCase):
             self.assertFalse(list(Path(folder).rglob("*.bin")))
         self.assertFalse(sock.sent)
 
-    def test_marker_saved_without_fake_microphone_file(self):
+    def test_idle_marker_acknowledged_without_creating_second_folder(self):
         with tempfile.TemporaryDirectory() as folder:
             sock = Fragmented(record(b"", 0, stamp=3_000_000))
             path, _ = receive_record(sock, CaptureStore(folder))
             self.assertIsNone(path)
             self.assertEqual(len(sock.sent), 12)
-            marker = Path(folder) / "second_0000000003" / "batch.json"
-            self.assertEqual(json.loads(marker.read_text())["board_batch_release_us"], 3_000_000)
-            self.assertFalse(list(Path(folder).rglob("*.bin")))
+            self.assertFalse(list(Path(folder).iterdir()))
 
     def test_capture_second_is_independent_of_delayed_delivery(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -103,8 +109,8 @@ class EthernetTests(unittest.TestCase):
 
     def test_reconnect_after_timeout_and_mid_frame_disconnect(self):
         args = SimpleNamespace(board=None, port=5001, retry_delay=1.0, receive_timeout=75)
-        partial = Fragmented(b"READY2\r\n" + record()[:-1])
-        complete = Fragmented(b"READY2\r\n" + record(b"", 0, 1_000_000) + record())
+        partial = Fragmented(b"READY3\r\n" + record()[:-1])
+        complete = Fragmented(b"READY3\r\n" + record(b"", 0, 1_000_000) + record())
         output = io.StringIO()
         with tempfile.TemporaryDirectory() as folder:
             endpoints = [TimeoutError(), (partial, "169.254.59.46", "169.254.59.45"),
@@ -116,8 +122,8 @@ class EthernetTests(unittest.TestCase):
             self.assertEqual(connect.call_count, 4)
             self.assertEqual(sleep.call_count, 3)
             self.assertEqual(len(list(Path(folder).rglob("*.bin"))), 1)
-            self.assertEqual(partial.sent, b"SONAR2\r\n")
-            self.assertIn(b"ACK2", complete.sent)
+            self.assertEqual(partial.sent, b"SONAR3\r\n")
+            self.assertIn(b"ACK3", complete.sent)
             self.assertEqual(complete.timeouts, [10, 75])
             metadata = json.loads((Path(folder) / "connection_000002" / "connection.json").read_text())
             self.assertEqual(metadata["local_ip"], "169.254.12.34")
@@ -151,14 +157,14 @@ class EthernetTests(unittest.TestCase):
         self.assertEqual(channel_bits(data, 14), [0, 1])
 
     def test_c_wire_fixture(self):
-        fixture = Path("wire_fixture.bin")
-        if not fixture.exists():
-            fixture = Path(__file__).parent / "fixtures" / "wire_v1.bin"
+        fixture = Path(__file__).parent / "fixtures" / "wire_v2.bin"
         meta = decode_header(fixture.read_bytes())
         self.assertEqual(meta["trigger_request_us"], 1234567890123)
         self.assertEqual(meta["commanded_position"], -16)
         self.assertEqual(meta["requested_steps"], -8)
-        self.assertEqual(meta["rx_nominal_us"], 3125)
+        self.assertEqual(meta["rx_nominal_us"], 50000)
+        self.assertEqual(meta["boot_id"], BOOT)
+        self.assertEqual(meta["test_id"], TEST)
 
 
 if __name__ == "__main__":

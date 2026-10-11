@@ -14,8 +14,8 @@ from sonar_gui_audio import (audio_request, inspect_wav, matching_configuration,
                              save_configuration, ConfigurationWorker)
 from sonar_configure import ControlClient, packet, FIELDS, HEADER, crc32
 from capture_store import CaptureStore
-from receive_ethernet import decode_header
-from test_ethernet import record, Fragmented
+from receive_ethernet import decode_header, HEADER as RECORD_HEADER
+from test_ethernet import record, Fragmented, BOOT, TEST
 
 
 def wav_data(samples=1680, rate=48000, channels=1, width=2):
@@ -32,6 +32,9 @@ def reply(**extra):
              start_hz=2500, stop_hz=5600, duration_us=35000, amplitude_pct=40,
              tx_samples=1680, sample_hz=48000, max_samples=2352, capture_us=50000,
              start_margin_us=1000)
+    for prefix, value in (("boot", extra.get("boot_id", BOOT)), ("test", extra.get("test_id", TEST))):
+        r[prefix+"_id"] = value
+        r.update((f"{prefix}_word_{i}", word) for i,word in enumerate(struct.unpack("<4I",bytes.fromhex(value))))
     r.update(extra)
     return r
 
@@ -88,7 +91,7 @@ class AudioTests(unittest.TestCase):
 
     def test_bound_socket_protocol_and_fragmentation(self):
         r = reply()
-        data = struct.pack("<22I", *(r[k] for k in FIELDS))
+        data = struct.pack("<30I", *(r[k] for k in FIELDS))
         class Connected(Fragmented):
             def close(self):
                 pass
@@ -114,6 +117,8 @@ class AudioTests(unittest.TestCase):
                     return self
                 def __exit__(self, *_):
                     pass
+                def ensure_boot_identity(self):
+                    return result
                 def upload_wav(self, data, amplitude, progress):
                     calls.append((data, amplitude))
                     progress(len(data), len(data))
@@ -158,6 +163,8 @@ class AudioTests(unittest.TestCase):
                 return self
             def __exit__(self, *_):
                 pass
+            def ensure_boot_identity(self):
+                return reply()
             def generate(self, *args):
                 return reply()
         worker = ConfigurationWorker(1, "apply", SimpleNamespace(port=5001), "unused",
@@ -173,10 +180,10 @@ class AudioTests(unittest.TestCase):
             first = reply(config_id=7)
             save_configuration(temp, "board", first)
             save_configuration(temp, "board", reply(config_id=8, start_hz=3000))
-            raw = bytearray(record()[:80])
+            raw = bytearray(record()[:RECORD_HEADER.size])
             struct.pack_into("<I", raw, 20, (7 << 16) | 15)
             struct.pack_into("<I", raw, 64, 35000)
-            struct.pack_into("<I", raw, 76, crc32(raw[:76]))
+            struct.pack_into("<I", raw, 108, crc32(raw[:108]))
             meta = decode_header(raw)
             store = CaptureStore(temp)
             path = store.save(meta, bytes(4))

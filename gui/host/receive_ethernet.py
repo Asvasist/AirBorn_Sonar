@@ -10,7 +10,7 @@ import zlib
 from capture_store import CaptureStore, write_json, utc_now
 from sonar_connection import connect_board, permission_help
 
-HEADER = struct.Struct("<4sHH6IQQqi5I")
+HEADER = struct.Struct("<4sHH6IQQqi13I")
 MAX_PAYLOAD = 16 * 1024 * 1024
 
 
@@ -31,9 +31,11 @@ def decode_header(raw):
     keys = ("magic", "version", "header_bytes", "payload_bytes", "sequence", "cycle",
             "flags", "channels", "pdm_hz", "trigger_request_us", "dma_observed_us",
             "commanded_position", "requested_steps", "step_divisor", "tx_nominal_us",
-            "rx_nominal_us", "payload_crc32", "header_crc32")
+            "rx_nominal_us", "payload_crc32",
+            *(f"boot_word_{i}" for i in range(4)),
+            *(f"test_word_{i}" for i in range(4)), "header_crc32")
     meta = dict(zip(keys, fields))
-    if (meta.pop("magic") != b"ASN2" or meta["version"] != 1 or
+    if (meta.pop("magic") != b"ASN3" or meta["version"] != 2 or
             meta["header_bytes"] != HEADER.size or
             zlib.crc32(raw[:-4]) != meta["header_crc32"]):
         raise ValueError("Invalid header or checksum")
@@ -43,6 +45,10 @@ def decode_header(raw):
         raise ValueError("Unsupported frame dimensions")
     if bool(meta["payload_bytes"]) != bool(meta["sequence"]):
         raise ValueError("Invalid heartbeat/frame sequence")
+    meta["boot_id"] = struct.pack("<4I", *(meta.pop(f"boot_word_{i}") for i in range(4))).hex()
+    meta["test_id"] = struct.pack("<4I", *(meta.pop(f"test_word_{i}") for i in range(4))).hex()
+    if meta["payload_bytes"] and (meta["boot_id"] == "0" * 32 or meta["test_id"] == "0" * 32):
+        raise ValueError("Recording lacks a valid boot/test identity.")
     meta["config_id"] = (meta["flags"] >> 16) & 0xffff
     meta["tx_mode"] = ("WAV" if meta["flags"] & 0x200 else "GENERATE") if meta["config_id"] else "UNKNOWN"
     meta["tx_duration_us"] = meta["tx_nominal_us"]
@@ -55,7 +61,7 @@ def receive_record(sock, store):
     if zlib.crc32(payload) != meta["payload_crc32"]:
         raise ValueError("Payload checksum mismatch; record not acknowledged")
     path = store.save(meta, payload)
-    sock.sendall(struct.pack("<4sII", b"ACK2", meta["sequence"], meta["payload_crc32"]))
+    sock.sendall(struct.pack("<4sII", b"ACK3", meta["sequence"], meta["payload_crc32"]))
     return path, meta
 
 
@@ -69,8 +75,8 @@ def run_receiver(args, folder):
             with sock:
                 phase = "protocol handshake"
                 sock.settimeout(10)
-                sock.sendall(b"SONAR2\r\n")
-                if read_exact(sock, 8) != b"READY2\r\n":
+                sock.sendall(b"SONAR3\r\n")
+                if read_exact(sock, 8) != b"READY3\r\n":
                     raise ValueError("Unexpected board protocol")
                 # A healthy board deliberately sends no records for 30 seconds.
                 sock.settimeout(args.receive_timeout)
