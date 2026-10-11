@@ -1,7 +1,7 @@
 #include "sonar_selftest.h"
 #include "sonar_config.h"
 #include "sonar_health.h"
-#include "sonar_profile.h"
+#include "sonar_bsp_validation.h"
 #include <stddef.h>
 
 #define CHECK(condition)                                                                           \

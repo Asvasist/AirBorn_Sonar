@@ -1,5 +1,5 @@
 #include "sonar_pl_gpio.h"
-#include "sonar_profile.h"
+#include "sonar_bsp_validation.h"
 #include "sonar_codec_bus.h"
 #include "FreeRTOS.h"
 #include "task.h"

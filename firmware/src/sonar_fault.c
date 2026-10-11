@@ -1,4 +1,4 @@
-#include "sonar_rtos.h"
+#include "sonar_supervisor.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "xil_printf.h"

@@ -1,6 +1,6 @@
 #include "sonar_console.h"
-#include "sonar_sequencer.h"
-#include "sonar_rtos.h"
+#include "sonar_experiment_coordinator.h"
+#include "sonar_supervisor.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
 

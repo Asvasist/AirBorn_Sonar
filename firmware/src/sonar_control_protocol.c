@@ -15,8 +15,8 @@ void sonar_control_header(uint8_t out[SONAR_CONTROL_HEADER], uint32_t op, uint32
                           const uint8_t *payload, uint32_t bytes)
 {
     memset(out, 0, SONAR_CONTROL_HEADER);
-    memcpy(out, "ASC1", 4);
-    out[4] = 1;
+    memcpy(out, "ASC2", 4);
+    out[4] = 2;
     out[6] = SONAR_CONTROL_HEADER;
     sonar_put_u32(out + 8, op);
     sonar_put_u32(out + 12, id);
@@ -27,7 +27,7 @@ void sonar_control_header(uint8_t out[SONAR_CONTROL_HEADER], uint32_t op, uint32
 bool sonar_control_decode(const uint8_t h[SONAR_CONTROL_HEADER], uint32_t *op, uint32_t *id,
                           uint32_t *bytes, uint32_t *crc)
 {
-    if (memcmp(h, "ASC1", 4) != 0 || h[4] != 1U || h[5] != 0U || h[6] != SONAR_CONTROL_HEADER ||
+    if (memcmp(h, "ASC2", 4) != 0 || h[4] != 2U || h[5] != 0U || h[6] != SONAR_CONTROL_HEADER ||
         h[7] != 0U || sonar_get_u32(h + 24) != sonar_crc32(h, 24) ||
         sonar_get_u32(h + 16) > SONAR_CONTROL_MAX_PAYLOAD) {
         return false;

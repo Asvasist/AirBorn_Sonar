@@ -3,7 +3,7 @@
 #include "sonar_acquisition_config.h"
 #include <stdbool.h>
 #include <stdint.h>
-#define SONAR_WIRE_HEADER 80U
+#define SONAR_WIRE_HEADER 112U
 typedef struct {
     uint32_t sequence, flags, divisor;
     int32_t steps;
@@ -12,6 +12,7 @@ typedef struct {
     uint32_t tx_duration_us;
     uint32_t config_id, tx_mode, tx_start_hz, tx_stop_hz, tx_amplitude_pct;
     uint32_t tx_samples, waveform_id, waveform_crc, tx_sample_hz;
+    uint32_t boot_id[4], test_id[4];
 } sonar_frame_meta_t;
 typedef enum { FRAME_FREE, FRAME_FILLING, FRAME_READY, FRAME_SENDING } sonar_frame_state_t;
 typedef struct {

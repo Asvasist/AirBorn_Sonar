@@ -2,12 +2,13 @@
 #include "sonar_component_selftest.h"
 #include "sonar_console_buffer.h"
 #include "sonar_control_protocol.h"
-#include "sonar_cycle.h"
+#include "sonar_measurement_cycle.h"
 #include "sonar_experiment_config.h"
 #include "sonar_frames.h"
-#include "sonar_number.h"
+#include "sonar_identity.h"
+#include "sonar_integer_parser.h"
 #include "sonar_scan360.h"
-#include "sonar_wav.h"
+#include "sonar_wav_writer.h"
 #include <string.h>
 
 #define CHECK(condition)                                                                           \
@@ -153,12 +154,53 @@ static bool frames_pool_exhaustion(void)
 static bool crc32_and_header(void)
 {
     uint8_t header[SONAR_WIRE_HEADER];
-    const sonar_frame_meta_t meta = {.sequence = 0x01020304U, .flags = 0x100U};
+    const sonar_frame_meta_t meta = {.sequence = 0x01020304U,
+                                     .flags = 0x100U,
+                                     .boot_id = {1U, 2U, 3U, 4U},
+                                     .test_id = {5U, 6U, 7U, 8U}};
     CHECK(sonar_crc32((const uint8_t *)"123456789", 9U) == 0xcbf43926U); /* CRC-32/ISO-HDLC */
     sonar_frame_header(header, &meta, 1000U, 0xdeadbeefU);
-    CHECK(memcmp(header, "ASN2", 4) == 0 && header[6] == SONAR_WIRE_HEADER);
+    CHECK(memcmp(header, "ASN3", 4) == 0 && header[4] == 2U && header[5] == 0U &&
+          header[6] == SONAR_WIRE_HEADER && header[7] == 0U);
     CHECK(header[12] == 0x04U && header[15] == 0x01U && header[72] == 0xefU);
-    return sonar_get_u32(header + 76) == sonar_crc32(header, 76U);
+    for (unsigned i = 0U; i < SONAR_ID_WORDS; ++i) {
+        CHECK(sonar_get_u32(header + 76U + i * 4U) == meta.boot_id[i]);
+        CHECK(sonar_get_u32(header + 92U + i * 4U) == meta.test_id[i]);
+    }
+    CHECK(sonar_get_u32(header + 108) == sonar_crc32(header, 108U));
+    header[92] ^= 1U; /* The header CRC must cover the recording identity too. */
+    return sonar_get_u32(header + 108) != sonar_crc32(header, 108U);
+}
+
+static bool recording_identity_rejects_stale_boot_and_repeated_start(void)
+{
+    const uint32_t zero[SONAR_ID_WORDS] = {0U};
+    const uint32_t boot[SONAR_ID_WORDS] = {10U, 20U, 30U, 40U};
+    const uint32_t wrong_boot[SONAR_ID_WORDS] = {11U, 20U, 30U, 40U};
+    const uint32_t first[SONAR_ID_WORDS] = {50U, 60U, 70U, 80U};
+    const uint32_t second[SONAR_ID_WORDS] = {51U, 60U, 70U, 80U};
+    uint32_t saved_boot[SONAR_ID_WORDS], saved_test[SONAR_ID_WORDS];
+    CHECK(!sonar_identity_test_ready());
+    CHECK(!sonar_identity_set_boot(NULL) && !sonar_identity_set_boot(zero));
+    CHECK(!sonar_identity_prepare_test(boot, first));
+    CHECK(sonar_identity_set_boot(boot) && sonar_identity_set_boot(boot));
+    CHECK(!sonar_identity_set_boot(wrong_boot));
+    CHECK(!sonar_identity_prepare_test(wrong_boot, first));
+    CHECK(!sonar_identity_prepare_test(boot, zero));
+    CHECK(!sonar_identity_prepare_test(NULL, first));
+    CHECK(!sonar_identity_prepare_test(boot, NULL));
+    CHECK(sonar_identity_prepare_test(boot, first) && sonar_identity_test_ready());
+    sonar_identity_snapshot(saved_boot, saved_test);
+    CHECK(memcmp(saved_boot, boot, sizeof(boot)) == 0 &&
+          memcmp(saved_test, first, sizeof(first)) == 0);
+    sonar_identity_consume_test();
+    CHECK(!sonar_identity_test_ready() && !sonar_identity_prepare_test(boot, first));
+    CHECK(sonar_identity_prepare_test(boot, second) && sonar_identity_test_ready());
+    sonar_identity_disarm();
+    sonar_identity_snapshot(saved_boot, saved_test);
+    return !sonar_identity_test_ready() && !sonar_identity_prepare_test(boot, second) &&
+           memcmp(saved_boot, boot, sizeof(boot)) == 0 &&
+           memcmp(saved_test, second, sizeof(second)) == 0;
 }
 
 /* ---- sonar_control_protocol --------------------------------------------- */
@@ -171,6 +213,11 @@ static bool control_header_round_trip_and_rejection(void)
     sonar_control_header(header, CTRL_APPLY, 42U, payload, sizeof(payload));
     CHECK(sonar_control_decode(header, &op, &id, &bytes, &crc));
     CHECK(op == CTRL_APPLY && id == 42U && bytes == 3U && crc == sonar_crc32(payload, 3U));
+    CHECK(memcmp(header, "ASC2", 4) == 0 && header[4] == 2U);
+    header[4] = 1U; /* A valid CRC must not make the previous protocol version acceptable. */
+    sonar_put_u32(header + 24, sonar_crc32(header, 24U));
+    CHECK(!sonar_control_decode(header, &op, &id, &bytes, &crc));
+    sonar_control_header(header, CTRL_APPLY, 42U, payload, sizeof(payload));
     header[9] ^= 1U; /* Corrupt the opcode: header CRC must catch it. */
     CHECK(!sonar_control_decode(header, &op, &id, &bytes, &crc));
     sonar_control_header(header, CTRL_APPLY, 1U, NULL, 0U);
@@ -282,6 +329,8 @@ sonar_test_result_t sonar_logic_selftest_run(sonar_test_report_fn report)
         {"frames round trip oldest first with NAK retry", frames_round_trip_oldest_first},
         {"frames pool exhaustion", frames_pool_exhaustion},
         {"crc32 check value and wire header", crc32_and_header},
+        {"recording identity rejects stale boot and repeated Start",
+         recording_identity_rejects_stale_boot_and_repeated_start},
         {"control header round trip and rejection", control_header_round_trip_and_rejection},
         {"console buffer lines and loss report",
          console_buffer_returns_complete_lines_and_reports_loss},

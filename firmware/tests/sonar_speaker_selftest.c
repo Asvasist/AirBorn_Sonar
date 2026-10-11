@@ -1,4 +1,4 @@
-#include "sonar_speaker.h"
+#include "sonar_codec_service.h"
 #include "sonar_component_selftest.h"
 #include <stddef.h>
 #include <string.h>

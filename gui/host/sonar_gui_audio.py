@@ -14,7 +14,7 @@ from sonar_sample_rates import TX_SAMPLE_HZ
 from sonar_connection import connect_board
 
 CONFIG_FIELDS = ("config_id", "mode", "start_hz", "stop_hz", "duration_us",
-                 "amplitude_pct", "waveform_id", "tx_samples", "sample_hz", "capture_us")
+                 "amplitude_pct", "waveform_id", "tx_samples", "sample_hz", "capture_us", "boot_id")
 
 
 def unsigned(text, label, low, high):
@@ -54,7 +54,8 @@ def read_waveform(path):
 
 
 def matching_configuration(expected, actual):
-    return (bool(actual.get("active_valid")) and not actual.get("pending_flags", 7)
+    return (bool(expected and expected.get("boot_id") and expected["boot_id"] != "0" * 32)
+            and bool(actual.get("active_valid")) and not actual.get("pending_flags", 7)
             and all(expected.get(key) == actual.get(key) for key in CONFIG_FIELDS)
             and (actual.get("mode") != 1 or
                  (actual.get("waveform_id") == actual.get("available_waveform_id")
@@ -67,9 +68,9 @@ def save_configuration(folder, board, reply, source=None, data=None, transmitted
     target = configs / f"config_{reply['config_id']:05d}.json"
     if target.exists():
         raise ValueError("Configuration ID already exists in this connection folder. Reconnect after a board reset.")
-    manifest = {"protocol": "ASC1-v1", "board": board, "configured_at_utc": utc_now(),
+    manifest = {"protocol": "ASC2-v2", "board": board, "configured_at_utc": utc_now(),
                 "configuration": reply, "source_wav": source, "rx_sample_hz": 96000,
-                "id_scope": "This receiver connection; IDs restart on board reset."}
+                "id_scope": "Configuration ID within the explicit board boot; copied into each prepared test."}
     if data is not None:
         name = f"config_{reply['config_id']:05d}_source.wav"
         write_atomic(configs / name, data)
@@ -134,11 +135,12 @@ class ConfigurationWorker(threading.Thread):
                 self.sock = sock
             with self.client_factory(board, connected_socket=sock) as client:
                 if self.action == "probe":
-                    reply = client.request(1)
+                    reply = client.ensure_boot_identity()
                 elif self.action == "verify":
                     reply = client.status()
                     if not matching_configuration(self.expected, reply):
                         raise ValueError("Board configuration changed or is not ready. Apply the displayed settings again.")
+                    reply = client.prepare_test(reply["boot_id"], reply["config_id"])
                 elif self.action == "apply":
                     applying = True
                     if self.request["mode"] == "GENERATE":

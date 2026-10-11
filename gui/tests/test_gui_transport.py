@@ -34,7 +34,7 @@ class GuiTransportTests(unittest.TestCase):
 
     def test_receiver_reconnects_and_persists_before_event(self):
         with tempfile.TemporaryDirectory() as folder:
-            sock = Socket(b"READY2\r\n" + record())
+            sock = Socket(b"READY3\r\n" + record())
             attempts, events = [], []
             def connector(args, log):
                 attempts.append(1)
@@ -46,9 +46,10 @@ class GuiTransportTests(unittest.TestCase):
                 if kind == "record":
                     self.assertEqual(Path(value[0]).read_bytes(), b"\x01\x80\x02\x40")
                     self.assertTrue(Path(value[0]).with_suffix(".json").is_file())
-                    self.assertIn(b"ACK2", sock.sent)
+                    self.assertIn(b"ACK3", sock.sent)
                     worker.stop()
             worker = EthernetWorker(self.args(folder), emit, connector)
+            self.addCleanup(worker.cleanup)
             worker.cancel = FastEvent()
             worker.run()
             self.assertEqual(len(attempts), 2)
@@ -58,18 +59,19 @@ class GuiTransportTests(unittest.TestCase):
 
     def test_bad_payload_not_saved_or_acknowledged(self):
         with tempfile.TemporaryDirectory() as folder:
-            sock = Socket(b"READY2\r\n" + record()[:-1] + b"\xff")
+            sock = Socket(b"READY3\r\n" + record()[:-1] + b"\xff")
             def emit(kind, value):
                 if kind == "log" and "checksum" in value:
                     worker.stop()
             worker = EthernetWorker(self.args(folder), emit, lambda args, log: (sock, "board", "local"))
+            self.addCleanup(worker.cleanup)
             worker.run()
-            self.assertNotIn(b"ACK2", sock.sent)
+            self.assertNotIn(b"ACK3", sock.sent)
             self.assertFalse(list(Path(folder).rglob("*.bin")))
 
     def test_cancel_while_connecting_closes_late_socket_without_handshake(self):
         with tempfile.TemporaryDirectory() as folder:
-            sock = Socket(b"READY2\r\n")
+            sock = Socket(b"READY3\r\n")
             entered, release = threading.Event(), threading.Event()
             def connect(args, log):
                 entered.set()
@@ -77,6 +79,7 @@ class GuiTransportTests(unittest.TestCase):
                 return sock, "board", "local"
             events = []
             worker = EthernetWorker(self.args(folder), lambda *e: events.append(e), connect)
+            self.addCleanup(worker.cleanup)
             worker.start()
             self.assertTrue(entered.wait(2))
             worker.stop()
@@ -100,13 +103,29 @@ class GuiTransportTests(unittest.TestCase):
                 def shutdown(self, how):
                     release.set()
                     super().shutdown(how)
-            sock = Blocking(b"READY2\r\n")
+            sock = Blocking(b"READY3\r\n")
             worker = EthernetWorker(self.args(folder), lambda *e: None, lambda args, log: (sock, "board", "local"))
+            self.addCleanup(worker.cleanup)
             worker.start()
             self.assertTrue(blocked.wait(2))
             worker.stop()
             worker.join(2)
             self.assertFalse(worker.is_alive())
+
+    def test_idle_connected_receiver_does_not_create_output_folders(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output=Path(folder)/"recordings"
+            sock=Socket(b"READY3\r\n"+record(b"",0,30_000_000))
+            events=[]
+            def emit(kind,value):
+                events.append((kind,value))
+                if kind=="batch":worker.stop()
+            worker=EthernetWorker(self.args(output),emit,lambda args,log:(sock,"board","local"))
+            self.addCleanup(worker.cleanup)
+            worker.run()
+            self.assertIn(b"ACK3",sock.sent)
+            self.assertFalse(output.exists())
+            self.assertFalse(any(k=="folder" for k,_ in events))
 
 
 if __name__ == "__main__":

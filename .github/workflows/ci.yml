@@ -28,9 +28,9 @@ jobs:
         run: clang-format --dry-run --Werror firmware/src/*.[ch] firmware/tests/*.[ch]
       - name: cppcheck (hardware-independent modules)
         run: |
-          cppcheck --std=c11 --enable=warning,style,performance,portability --error-exitcode=1 \
+          cppcheck --std=c11 --platform=unix64 --enable=warning,style,performance,portability --error-exitcode=1 \
                    --inline-suppr --suppress=missingIncludeSystem -I firmware/src \
-                   firmware/src/sonar_{pdm,wav,cycle,frames,console_buffer,control_protocol,number,scan360,experiment_config,config,health,profile,mic,speaker,codec_bus}.c
+                   firmware/src/sonar_{pdm_decimator,wav_writer,measurement_cycle,frames,console_buffer,control_protocol,integer_parser,scan360,experiment_config,config,health,bsp_validation,mic,codec_service,codec_bus,identity}.c
 
   gui-tests:
     runs-on: windows-latest

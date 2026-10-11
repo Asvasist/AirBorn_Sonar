@@ -5,9 +5,11 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "host"))
 from sonar_gui_control import ExperimentControl, parse_steps
+from test_ethernet import BOOT, TEST
 
 
-APPLIED = dict(config_id=1, mode=0, duration_us=35000, amplitude_pct=40, waveform_id=0)
+APPLIED = dict(config_id=1, mode=0, duration_us=35000, amplitude_pct=40, waveform_id=0,
+               boot_id=BOOT, test_id=TEST)
 
 
 def status(state="IDLE", steps=20, receiver=1, used=0, config=1):
@@ -119,6 +121,35 @@ class GuiControlTests(unittest.TestCase):
         self.assertTrue(self.c.drained)
         self.now += 4
         self.assertFalse(self.c.drained)
+
+    def test_start_waits_for_previous_test_ddr_to_drain(self):
+        self.c.line(status("STOPPED", used=2))
+        self.assertFalse(self.c.can_start)
+        before=list(self.sent)
+        with self.assertRaises(ValueError):self.c.start("45")
+        self.assertEqual(self.sent,before)
+        self.c.line(status("STOPPED", used=0))
+        self.assertTrue(self.c.can_start)
+
+    def test_destination_prepared_once_after_confirmation_before_r(self):
+        calls=[]
+        self.c.before_run=lambda first,positions:calls.append((first,positions,list(self.sent)))
+        self.enter_value("45")
+        self.assertFalse(calls)
+        self.c.line(status(steps=45))
+        self.assertEqual(calls,[(4,45,[b"s",b"n",b"45\r"])])
+        self.assertEqual(self.sent[-1],b"r")
+        self.c.line(status("ACQUIRE",steps=45,used=1))
+        self.assertEqual(len(calls),1)
+
+    def test_configuration_copy_failure_prevents_start(self):
+        def failed(*_):raise OSError("cached playback missing")
+        self.c.before_run=failed
+        self.enter_value("45")
+        self.c.line(status(steps=45))
+        self.assertNotIn(b"r",self.sent)
+        self.assertEqual(self.sent[-1],b"x")
+        self.assertIn("cached playback missing",self.c.error)
 
     def test_fault_latched_even_after_idle_report(self):
         self.c.line("HEALTH FAULT TIMEOUT")

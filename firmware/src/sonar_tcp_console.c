@@ -1,6 +1,6 @@
 #include "sonar_tcp_console.h"
 #include "sonar_console_buffer.h"
-#include "sonar_sequencer.h"
+#include "sonar_experiment_coordinator.h"
 #include "sonar_console.h"
 #include "sonar_socket.h"
 #include "FreeRTOS.h"
