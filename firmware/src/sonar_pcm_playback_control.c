@@ -5,8 +5,8 @@
 
 /* Block-design mapping (hardware/README.md): axi_gpio_1 selects the I2S source
  * (generator or BRAM player); channel 1 of axi_gpio_chirp_control holds the
- * sample count for either source. The player exposes no status register, so
- * completion is timed from the trigger in sonar_tx_control.c. */
+ * sample count for either source. sonar_tx_control.c reads the synchronized
+ * transmitter completion status, which covers both playback modes. */
 #define MODE_REG        SONAR_TX_SOURCE_BASEADDR
 #define GPIO_TRI_OFFSET 4U
 #define MODE_GENERATE   0U

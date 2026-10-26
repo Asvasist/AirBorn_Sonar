@@ -12,13 +12,13 @@
 #define SONAR_ACQ_MOTOR_START_US     2000000U /* Measured from the shared trigger. */
 #define SONAR_ACQ_SETTLE_US          2000000U /* Measured from observed motor completion. */
 #define SONAR_ACQ_CAPTURE_TIMEOUT_US 500000U
-#define SONAR_ACQ_MOVE_TIMEOUT_US    60000000U
+#define SONAR_ACQ_MOVE_TIMEOUT_US    300000000U
 #define SONAR_ACQ_BATCH_MS           30000U
 #define SONAR_ACQ_POOL_COUNT         32U
 #define SONAR_ACQ_BYTES              (SONAR_ACQ_WORDS * 4U)
 #define SONAR_ACQ_SPAN               ((SONAR_ACQ_BYTES + 31U) & ~31U)
 #define SONAR_ACQ_MAX_STEPS          100000
-#define SONAR_ACQ_DEFAULT_DIVISOR    1U
+#define SONAR_ACQ_DEFAULT_DIVISOR    8U
 #define SONAR_MIC_RESET_TIMEOUT_MS   100U
 #define SONAR_HARDWARE_NAME          "hardware/airborne_sonar.xsa (TX <= 49 ms, RX 50 ms, 16 ch)"
 

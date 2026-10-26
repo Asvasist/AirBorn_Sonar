@@ -12,22 +12,35 @@
 #include <stddef.h>
 
 static bool initialized, applied, prepared, running, completed, aborted, fault;
-static uint32_t duration_us;
+static uint64_t tx_timeout_us;
+static uint32_t completion_baseline;
 static uint64_t started_us;
-static sonar_tx_mode_t mode = SONAR_TX_GENERATE;
 
-/* Neither source reports completion, so playback ends a fixed time after the
- * trigger: the configured duration plus the FPGA start margin. */
+/* All TX/control calls are serialized by the existing experiment task.
+ * This reads synchronized persistent status, never the one-cycle tx_done pulse.
+ * Duration contributes only to a fault deadline, never successful completion. */
+static uint32_t tx_hw_status(void)
+{
+    return Xil_In32((UINTPTR)SONAR_TX_STATUS_BASEADDR);
+}
+
 static void poll_tx(void)
 {
     if (!running) {
         return;
     }
-    uint64_t elapsed = sonar_clock_us() - started_us;
-    uint64_t end = (uint64_t)duration_us + SONAR_TX_START_MARGIN_US;
-    if (elapsed >= end) {
+    uint32_t status = tx_hw_status();
+    if ((status & TX_TOGGLE_MASK) != completion_baseline && (status & TX_DONE_MASK) != 0U &&
+        (status & TX_ACTIVE_MASK) == 0U) {
         running = false;
-        completed = true;
+        completed = !fault;
+        return;
+    }
+    if (sonar_clock_us() - started_us >= tx_timeout_us) {
+        completed = false;
+        fault = true;
+        /* Keep running set: elapsed time does not prove hardware is idle.
+         * A later completion may drain TX, but cannot clear this latched fault. */
     }
 }
 
@@ -35,6 +48,21 @@ bool sonar_chirp_init(void)
 {
     if (initialized) {
         return !fault;
+    }
+    if (fault) {
+        return false;
+    }
+    if (SONAR_TX_STATUS_BASEADDR == 0U || SONAR_TX_STATUS_GPIO_WIDTH < 3U ||
+        (SONAR_TX_STATUS_BASEADDR & 3U) != 0U) {
+        fault = true;
+        return false;
+    }
+    /* The status channel is input-only in the required Vivado design. */
+    Xil_Out32((UINTPTR)SONAR_TX_STATUS_BASEADDR + 4U, 7U);
+    SYNCHRONIZE_IO;
+    if ((tx_hw_status() & TX_ACTIVE_MASK) != 0U) {
+        fault = true;
+        return false;
     }
     sonar_audio_profile_t p = sonar_platform_audio_profile();
     uint32_t required = SONAR_PROFILE_CHIRP_FREQ | SONAR_PROFILE_CHIRP_CONTROL;
@@ -59,7 +87,7 @@ uint32_t sonar_chirp_capabilities(void)
     if (!initialized || fault) {
         return 0U;
     }
-    uint32_t caps = AUDIO_CAP_GENERATE;
+    uint32_t caps = AUDIO_CAP_GENERATE | AUDIO_CAP_HW_COMPLETION;
     if (sonar_wav_player_available()) {
         caps |= AUDIO_CAP_WAV | AUDIO_CAP_WAV_GAIN;
     }
@@ -81,6 +109,9 @@ bool sonar_chirp_apply(const sonar_experiment_config_t *c, const sonar_chirp_val
     if (!initialized || fault || running || prepared || c == NULL || v == NULL ||
         c->config_id == 0U || c->config_id > 65535U ||
         !sonar_experiment_calculate(c, sonar_waveform_samples(), &checked)) {
+        return false;
+    }
+    if ((tx_hw_status() & TX_ACTIVE_MASK) != 0U) {
         return false;
     }
     if (c->mode == SONAR_TX_WAV && (!sonar_wav_player_available() || sonar_waveform_uploading() ||
@@ -109,8 +140,8 @@ bool sonar_chirp_apply(const sonar_experiment_config_t *c, const sonar_chirp_val
         return false;
     }
     SYNCHRONIZE_IO;
-    mode = c->mode;
-    duration_us = v->duration_us;
+    tx_timeout_us =
+        (uint64_t)v->duration_us + SONAR_TX_START_MARGIN_US + SONAR_TX_TIMEOUT_MARGIN_US;
     applied = true;
     completed = aborted = false;
     return true;
@@ -119,13 +150,21 @@ bool sonar_chirp_apply(const sonar_experiment_config_t *c, const sonar_chirp_val
 bool sonar_chirp_prepare(void)
 {
     poll_tx();
-    if (!initialized || !applied || fault || running) {
+    if (!initialized || !applied || fault || running || prepared) {
         return false;
     }
     if (!sonar_pl_gpio_update(SONAR_PL_TRIGGER, 0U)) {
         fault = true;
         return false;
     }
+    /* Capture before the shared trigger; prepared blocks reconfiguration and
+     * duplicate preparation until trigger or abort. Existing owner serialization
+     * prevents another task from issuing a start in between. */
+    uint32_t status = tx_hw_status();
+    if ((status & TX_ACTIVE_MASK) != 0U) {
+        return false;
+    }
+    completion_baseline = status & TX_TOGGLE_MASK;
     completed = aborted = false;
     prepared = true;
     return true;
@@ -168,7 +207,8 @@ bool sonar_chirp_abort(void)
         return false;
     }
 
-    /* There is no hardware abort: mute, then let the finite playback drain. */
+    /* No PL/CDC reset: mute and drain against hardware completion. The DMA's
+     * independent reset does not reset the audio configuration transaction. */
     TickType_t start = xTaskGetTickCount();
     poll_tx();
     while (running) {
@@ -179,7 +219,11 @@ bool sonar_chirp_abort(void)
         vTaskDelay(1U);
         poll_tx();
     }
+    if (fault || (tx_hw_status() & TX_ACTIVE_MASK) != 0U) {
+        fault = true;
+        return false;
+    }
     completed = false;
     aborted = true;
-    return !fault;
+    return true;
 }

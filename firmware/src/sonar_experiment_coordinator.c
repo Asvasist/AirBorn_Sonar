@@ -393,7 +393,7 @@ static void experiment_task(void *unused)
                         requested_positions = (int32_t)value;
                         message("Positions-per-revolution stored. Press R for one complete "
                                 "360-degree scan; X stops.");
-                    } else if (prompt == 'v' && valid && value > 0 && value <= 256 &&
+                    } else if (prompt == 'v' && valid && value == 8 &&
                                sonar_stepper_mode(&motor, (uint32_t)value)) {
                         message("Step divisor applied and read back from Tic.");
                     } else {
@@ -453,7 +453,7 @@ static void experiment_task(void *unused)
         }
         bool tx_fault = sonar_chirp_error();
         bool tx_done = sonar_chirp_done();
-        /* Keep the RX slot owned until TX completion (measured or estimated). Stop drains
+        /* Keep the RX slot owned until estimated TX completion. Stop drains
          * RX but discards that interrupted capture; earlier frames remain. */
         if (filling >= 0 && mic.state == MIC_READY && tx_done && !tx_fault) {
             if (cycle.stopping) {

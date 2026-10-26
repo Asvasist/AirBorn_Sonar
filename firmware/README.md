@@ -54,6 +54,28 @@ centered symmetric FIRs and compensate their group delay. Approximately
 `sonar_rx_fir_stages.h`; `sonar_rx_fir_reference.h` is used only by host tests.
 The legacy coefficient headers are retained for the optional old-filter benchmark.
 
+### Transmit completion and hardware requirements
+
+Playback completion is read from hardware, not estimated. A 3-bit input GPIO,
+`axi_gpio_tx_status` (channel 1, all inputs), reports the transmitter's ACTIVE
+and DONE state for both the generated chirp and BRAM playback. A start is
+complete when the pre-start completion toggle has changed, DONE is high and
+ACTIVE is low; elapsed time only sets a fault deadline. Faults stay latched and
+Stop waits for the hardware to drain instead of resetting the audio clock
+crossing. The RX slot stays owned until TX completion. Capability bit 3 (`0x8`)
+advertises hardware completion, so a ready board reports `0xF`.
+
+Uploaded waveforms use the 4096-word (16 KiB) playback BRAM at `0x4000_0000`,
+which limits an uploaded WAV to 4096 samples (about 42.67 ms at 96 kHz). The
+generated chirp does not use the BRAM and keeps its 4704-sample / 49 ms limit.
+BRAM writes are rejected while playback is pending or active. Build-time
+`_Static_assert`s in `sonar_audio_hw.h` reject a BSP without the status GPIO or
+with a different BRAM size (`sonar_tx_status_config.h`).
+
+Scan defaults: 88,000 Tic position units per revolution, 400 microsteps/s with
+300 microsteps/s² acceleration, default capture divisor 8 (the only accepted
+console value), and a 300 s motor-move timeout.
+
 ### Protocol compatibility
 
 The capture connection uses `SONAR3` / `READY3` greetings, `ASN3` version-2
