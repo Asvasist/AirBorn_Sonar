@@ -8,12 +8,11 @@
 /* Each 32-bit BRAM word holds one sample: the uploaded PCM16 in bits 31:16 and
  * the amplitude-scaled copy the FPGA plays in bits 15:0. Keeping the original
  * lets the amplitude change without a new upload. */
-#define SAMPLE_STRIDE 4U
+#define SAMPLE_STRIDE  4U
 #define APERTURE_WORDS (SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE)
-#define PHYSICAL_WORDS \
+#define PHYSICAL_WORDS                                                                             \
     (APERTURE_WORDS < SONAR_TX_BRAM_DEPTH_WORDS ? APERTURE_WORDS : SONAR_TX_BRAM_DEPTH_WORDS)
-#define CAPACITY \
-    (PHYSICAL_WORDS < SONAR_TX_MAX_SAMPLES ? PHYSICAL_WORDS : SONAR_TX_MAX_SAMPLES)
+#define CAPACITY (PHYSICAL_WORDS < SONAR_TX_MAX_SAMPLES ? PHYSICAL_WORDS : SONAR_TX_MAX_SAMPLES)
 
 static bool playback_idle(void)
 {

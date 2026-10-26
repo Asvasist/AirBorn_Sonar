@@ -31,23 +31,23 @@
 #endif
 
 /* Capability and status bits reported over the TCP 5003 protocol. */
-#define AUDIO_CAP_GENERATE 1U
-#define AUDIO_CAP_WAV      2U
-#define AUDIO_CAP_WAV_GAIN 4U
+#define AUDIO_CAP_GENERATE      1U
+#define AUDIO_CAP_WAV           2U
+#define AUDIO_CAP_WAV_GAIN      4U
 #define AUDIO_CAP_HW_COMPLETION 8U
-#define AUDIO_CONFIG_VALID 1U
-#define AUDIO_READY        2U
-#define AUDIO_TX_BUSY      4U
-#define AUDIO_TX_DONE      8U
-#define AUDIO_ABORT_DONE   16U
-#define AUDIO_CONFIG_ERROR 64U
+#define AUDIO_CONFIG_VALID      1U
+#define AUDIO_READY             2U
+#define AUDIO_TX_BUSY           4U
+#define AUDIO_TX_DONE           8U
+#define AUDIO_ABORT_DONE        16U
+#define AUDIO_CONFIG_ERROR      64U
 
 /* Reject a stale BSP at build time; never silently use timed completion or
  * a smaller aperture. These declarations cannot identify the loaded bitstream. */
 _Static_assert(SONAR_TX_STATUS_BASEADDR != 0U && SONAR_TX_STATUS_GPIO_WIDTH == 3U,
                "Update platform XSA/regenerate BSP: axi_gpio_tx_status inputs width 3 required");
-_Static_assert(SONAR_TX_BRAM_BASEADDR != 0U &&
-                   SONAR_TX_BRAM_DEPTH_WORDS == 4096U && SONAR_TX_BRAM_BYTES == 16384U,
+_Static_assert(SONAR_TX_BRAM_BASEADDR != 0U && SONAR_TX_BRAM_DEPTH_WORDS == 4096U &&
+                   SONAR_TX_BRAM_BYTES == 16384U,
                "Update platform XSA/regenerate BSP: 4096-word / 16-KiB playback BRAM required");
 _Static_assert(SONAR_TX_MAX_SAMPLES == 4704U && SONAR_AUDIO_HZ == 96000U,
                "This patch requires the fixed-96-kHz, 49-ms playback configuration");

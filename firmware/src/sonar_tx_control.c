@@ -30,8 +30,8 @@ static void poll_tx(void)
         return;
     }
     uint32_t status = tx_hw_status();
-    if ((status & TX_TOGGLE_MASK) != completion_baseline &&
-        (status & TX_DONE_MASK) != 0U && (status & TX_ACTIVE_MASK) == 0U) {
+    if ((status & TX_TOGGLE_MASK) != completion_baseline && (status & TX_DONE_MASK) != 0U &&
+        (status & TX_ACTIVE_MASK) == 0U) {
         running = false;
         completed = !fault;
         return;
@@ -140,8 +140,8 @@ bool sonar_chirp_apply(const sonar_experiment_config_t *c, const sonar_chirp_val
         return false;
     }
     SYNCHRONIZE_IO;
-    tx_timeout_us = (uint64_t)v->duration_us + SONAR_TX_START_MARGIN_US +
-                    SONAR_TX_TIMEOUT_MARGIN_US;
+    tx_timeout_us =
+        (uint64_t)v->duration_us + SONAR_TX_START_MARGIN_US + SONAR_TX_TIMEOUT_MARGIN_US;
     applied = true;
     completed = aborted = false;
     return true;
