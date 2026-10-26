@@ -33,10 +33,12 @@ flowchart LR
 For each of the N positions per revolution (1–1000, chosen by the user):
 
 1. Trigger playback and capture together (one FPGA GPIO edge).
-2. Transmit a chirp (generated LFM sweep or uploaded WAV, up to 49 ms, 96 kHz)
+2. Transmit a chirp (generated LFM sweep up to 49 ms, or an uploaded WAV of up to
+   4096 samples = 42.67 ms, at 96 kHz)
    while all 16 microphones record 50 ms.
 3. 2 s after the trigger, move the plate by 1/N of a revolution
-   (19,902 Tic position units per 360°; moves are rounded so they sum exactly).
+   (88,000 Tic position units per 360° at 400 microsteps/s; moves are rounded so
+   they sum exactly).
 4. Wait 2 s after the motor reports completion, then repeat.
 
 ## Repository
@@ -46,6 +48,13 @@ For each of the N positions per revolution (1–1000, chosen by the user):
 | [`hardware/`](hardware/README.md) | Vivado block design (Tcl), RTL, constraints, reproducible build, released XSA |
 | [`firmware/`](firmware/README.md) | FreeRTOS application, host unit tests |
 | [`gui/`](gui/README.md) | Desktop application for configuration, scan control and recording |
+
+## Status
+
+The firmware in this repository is the thesis-final version. It requires the
+transmit-status hardware interface described in the
+[firmware README](firmware/README.md#transmit-completion-and-hardware-requirements);
+the `hardware/` sources and XSA must match it before the firmware will build.
 
 ## Quick start
 

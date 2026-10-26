@@ -1,4 +1,5 @@
 #include "sonar_tx_bram.h"
+#include "sonar_tx_control.h"
 #include "sonar_audio_hw.h"
 #include "sonar_experiment_config.h"
 #include "xil_io.h"
@@ -8,10 +9,19 @@
  * the amplitude-scaled copy the FPGA plays in bits 15:0. Keeping the original
  * lets the amplitude change without a new upload. */
 #define SAMPLE_STRIDE 4U
-#define CAPACITY                                                                                   \
-    ((SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE) < SONAR_TX_MAX_SAMPLES                                  \
-         ? (SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE)                                                   \
-         : SONAR_TX_MAX_SAMPLES)
+#define APERTURE_WORDS (SONAR_TX_BRAM_BYTES / SAMPLE_STRIDE)
+#define PHYSICAL_WORDS \
+    (APERTURE_WORDS < SONAR_TX_BRAM_DEPTH_WORDS ? APERTURE_WORDS : SONAR_TX_BRAM_DEPTH_WORDS)
+#define CAPACITY \
+    (PHYSICAL_WORDS < SONAR_TX_MAX_SAMPLES ? PHYSICAL_WORDS : SONAR_TX_MAX_SAMPLES)
+
+static bool playback_idle(void)
+{
+    /* Software ownership blocks writes between prepare and trigger. Hardware
+     * ACTIVE independently blocks writes while a request/playback is pending. */
+    return (sonar_chirp_status() & (AUDIO_TX_BUSY | AUDIO_READY | AUDIO_CONFIG_ERROR)) == 0U &&
+           (Xil_In32((UINTPTR)SONAR_TX_STATUS_BASEADDR) & TX_ACTIVE_MASK) == 0U;
+}
 
 static bool initialized;
 
@@ -25,7 +35,7 @@ bool sonar_tx_bram_init(void)
     if (initialized) {
         return true;
     }
-    if (SONAR_TX_BRAM_BASEADDR == 0U) {
+    if (SONAR_TX_BRAM_BASEADDR == 0U || CAPACITY == 0U) {
         return false;
     }
     /* The BRAM sits in a 1 MiB section that must be device memory, not cached DDR. */
@@ -36,7 +46,7 @@ bool sonar_tx_bram_init(void)
 
 bool sonar_tx_bram_write(uint32_t pair, uint32_t packed)
 {
-    if (!initialized || pair >= (CAPACITY + 1U) / 2U) {
+    if (!initialized || pair >= (CAPACITY + 1U) / 2U || !playback_idle()) {
         return false;
     }
     UINTPTR at = (UINTPTR)SONAR_TX_BRAM_BASEADDR + pair * 2U * SAMPLE_STRIDE;
@@ -51,7 +61,8 @@ bool sonar_tx_bram_write(uint32_t pair, uint32_t packed)
 
 bool sonar_tx_bram_set_gain(uint32_t samples, uint32_t amplitude_pct)
 {
-    if (!initialized || samples == 0U || samples > CAPACITY || amplitude_pct > 100U) {
+    if (!initialized || samples == 0U || samples > CAPACITY || amplitude_pct > 100U ||
+        !playback_idle()) {
         return false;
     }
     for (uint32_t i = 0U; i < samples; ++i) {

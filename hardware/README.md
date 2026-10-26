@@ -53,7 +53,7 @@ in the constraints.
 
 | Peripheral | Base | Size |
 |---|---|---|
-| `axi_bram_ctrl_0` (TX waveform) | `0x4000_0000` | 8 KiB |
+| `axi_bram_ctrl_0` (TX waveform) | `0x4000_0000` | 8 KiB (the thesis-final firmware expects 16 KiB / 4096 words and an `axi_gpio_tx_status` input GPIO, see the firmware README) |
 | `axi_dma_0` (S2MM only, simple mode) | `0x4040_0000` | 64 KiB |
 | `axi_gpio_0` (trigger, codec ready) | `0x4120_0000` | 64 KiB |
 | `axi_gpio_chirp_control` | `0x4121_0000` | 64 KiB |

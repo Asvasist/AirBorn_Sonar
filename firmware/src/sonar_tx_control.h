@@ -1,6 +1,9 @@
 #ifndef SONAR_TX_CONTROL_H
 #define SONAR_TX_CONTROL_H
 #include "sonar_experiment_config.h"
+/* Experiment-task owner only, including prepare -> shared GPIO trigger ->
+ * triggered. TCP requests already enter through the owner's control queue.
+ * A TX fault is latched: do not reset/reinitialize audio mid-transaction. */
 bool sonar_chirp_init(void);
 uint32_t sonar_chirp_capabilities(void);
 uint32_t sonar_chirp_status(void);
